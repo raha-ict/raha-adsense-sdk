@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:pretty_dio_logger/pretty_dio_logger.dart';
 
 import '../config/raha_adsense_config.dart';
 import '../errors/raha_adsense_exception.dart';
@@ -25,38 +26,17 @@ Dio buildRahaDio(RahaAdsenseConfig config) {
     ),
   );
 
-  dio.interceptors.add(
-    InterceptorsWrapper(
-      onResponse: (response, handler) {
-        if (kDebugMode &&
-            config.enableDebugLogs &&
-            !response.requestOptions.path.contains('/tracking/')) {
-          debugPrint(
-            '[Raha Adsense] ${response.requestOptions.method} '
-            '${response.requestOptions.path.split('?').first}: '
-            'HTTP ${response.statusCode}',
-          );
-        }
-        handler.next(response);
-      },
-      onError: (error, handler) {
-        final path = error.requestOptions.path;
-        if (kDebugMode &&
-            config.enableDebugLogs &&
-            !path.contains('/tracking/')) {
-          final status = error.response?.statusCode;
-          final outcome =
-              status == null ? _describeDioError(error) : 'HTTP $status';
-          debugPrint(
-            '[Raha Adsense] ${error.requestOptions.method} '
-            '${error.requestOptions.uri.replace(query: '').toString()} '
-            'failed: $outcome',
-          );
-        }
-        handler.next(error);
-      },
-    ),
-  );
+  if (config.enableDebugLogs) {
+    dio.interceptors.add(
+      PrettyDioLogger(
+        requestHeader: true,
+        responseHeader: true,
+        error: true,
+        compact: true,
+        enabled: config.enableDebugLogs,
+      ),
+    );
+  }
 
   return dio;
 }

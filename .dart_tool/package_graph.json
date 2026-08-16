@@ -9,6 +9,7 @@
       "dependencies": [
         "dio",
         "flutter",
+        "pretty_dio_logger",
         "url_launcher",
         "uuid",
         "video_player",
@@ -83,6 +84,13 @@
         "url_launcher_platform_interface",
         "url_launcher_web",
         "url_launcher_windows"
+      ]
+    },
+    {
+      "name": "pretty_dio_logger",
+      "version": "1.4.0",
+      "dependencies": [
+        "dio"
       ]
     },
     {

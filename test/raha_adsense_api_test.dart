@@ -1,12 +1,43 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pretty_dio_logger/pretty_dio_logger.dart';
+import 'package:raha_adsense/src/config/raha_adsense_config.dart';
+import 'package:raha_adsense/src/config/raha_adsense_endpoints.dart';
 import 'package:raha_adsense/src/errors/raha_adsense_exception.dart';
 import 'package:raha_adsense/src/models/models.dart';
 import 'package:raha_adsense/src/network/raha_adsense_api.dart';
 
 void main() {
+  test('adds pretty dio logger when debug logs are enabled', () {
+    final dio = buildRahaDio(
+      RahaAdsenseConfig.forTesting(
+        appId: '743e8c4b-08e0-4152-877e-e035f7d92d9a',
+        endpoints: RahaAdsenseEndpoints.production,
+        enableDebugLogs: true,
+      ),
+    );
+
+    expect(dio.interceptors.whereType<PrettyDioLogger>(), hasLength(1));
+  });
+
+  test('does not add pretty dio logger when debug logs are disabled', () {
+    final dio = buildRahaDio(
+      RahaAdsenseConfig.forTesting(
+        appId: '743e8c4b-08e0-4152-877e-e035f7d92d9a',
+        endpoints: RahaAdsenseEndpoints.production,
+      ),
+    );
+
+    expect(dio.interceptors.whereType<PrettyDioLogger>(), isEmpty);
+  });
+
   test('normalizes signal keys and preserves scalar values', () {
     final result = validateAndNormalizePublisherSignals(
-      const {'Genre': 'news', 'score': 1.5, 'live': true, 'tags': ['fa', null]},
+      const {
+        'Genre': 'news',
+        'score': 1.5,
+        'live': true,
+        'tags': ['fa', null],
+      },
     );
 
     expect(result, {
@@ -35,7 +66,9 @@ void main() {
   test('rejects unsupported signal values', () {
     expect(
       () => validateAndNormalizePublisherSignals(
-        const {'genre': {'nested': true}},
+        const {
+          'genre': {'nested': true},
+        },
       ),
       throwsA(isA<RahaAdsException>()),
     );
