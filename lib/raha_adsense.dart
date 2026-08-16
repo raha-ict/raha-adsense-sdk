@@ -8,6 +8,7 @@ library raha_adsense;
 
 export 'src/core/click_opener.dart' show RahaClickOpener;
 export 'src/core/raha_adsense.dart';
+export 'src/config/raha_adsense_config.dart' show RahaAdsenseEnvironment;
 export 'src/errors/raha_adsense_exception.dart'
     show RahaAdsErrorCode, RahaAdsException;
 export 'src/models/ad_response.dart'
