@@ -6,7 +6,13 @@ final class RahaAdsenseEndpoints {
     required this.cdnBaseUrl,
   });
 
-  static final RahaAdsenseEndpoints production =
+  static final RahaAdsenseEndpoints production = RahaAdsenseEndpoints._validated(
+    apiOrigin: Uri.parse('https://api.adsense.raha.af'),
+    cdnBaseUrl: Uri.parse('https://cdn.raha.af/adsense/'),
+    allowInsecureHttp: false,
+  );
+
+  static final RahaAdsenseEndpoints development =
       RahaAdsenseEndpoints._validated(
     apiOrigin: Uri.parse('https://dev.api.adsense.raha.af'),
     cdnBaseUrl: Uri.parse('https://dev.cdn.raha.af/adsense/'),

@@ -5,6 +5,47 @@ import 'package:raha_adsense/src/config/raha_adsense_endpoints.dart';
 import 'package:raha_adsense/src/models/models.dart';
 
 void main() {
+  test('production config uses production endpoints by default', () {
+    final config = RahaAdsenseConfig.production(
+      appId: '743e8c4b-08e0-4152-877e-e035f7d92d9a',
+    );
+
+    expect(config.endpoints.apiOrigin, Uri.parse('https://api.adsense.raha.af'));
+    expect(
+      config.endpoints.cdnBaseUrl,
+      Uri.parse('https://cdn.raha.af/adsense/'),
+    );
+  });
+
+  test('production config accepts explicit production environment', () {
+    final config = RahaAdsenseConfig.production(
+      appId: '743e8c4b-08e0-4152-877e-e035f7d92d9a',
+      environment: RahaAdsenseEnvironment.production,
+    );
+
+    expect(config.endpoints.apiOrigin, Uri.parse('https://api.adsense.raha.af'));
+    expect(
+      config.endpoints.cdnBaseUrl,
+      Uri.parse('https://cdn.raha.af/adsense/'),
+    );
+  });
+
+  test('production config accepts development environment', () {
+    final config = RahaAdsenseConfig.production(
+      appId: '743e8c4b-08e0-4152-877e-e035f7d92d9a',
+      environment: RahaAdsenseEnvironment.development,
+    );
+
+    expect(
+      config.endpoints.apiOrigin,
+      Uri.parse('https://dev.api.adsense.raha.af'),
+    );
+    expect(
+      config.endpoints.cdnBaseUrl,
+      Uri.parse('https://dev.cdn.raha.af/adsense/'),
+    );
+  });
+
   test('stores custom click opener in config', () {
     Future<void> opener(Uri destinationUrl, RahaAdInfo info) async {
       expect(destinationUrl, isA<Uri>());

@@ -24,6 +24,7 @@ abstract final class RahaAdsense {
   static Future<void> setup({
     required String appId,
     RahaClickOpener? clickOpener,
+    RahaAdsenseEnvironment environment = RahaAdsenseEnvironment.production,
   }) async {
     if (_runtime != null) {
       throw StateError('RahaAdsense.setup() may be called only once.');
@@ -32,6 +33,7 @@ abstract final class RahaAdsense {
       config: RahaAdsenseConfig.production(
         appId: appId,
         clickOpener: clickOpener,
+        environment: environment,
       ),
     );
     try {

@@ -38,11 +38,20 @@ flutter pub get
 
 ## Quick Start
 
-Initialize the SDK before loading ads:
+Initialize the SDK before loading ads. Production endpoints are used by default:
 
 ```dart
 await RahaAdsense.setup(
   appId: '743e8c4b-08e0-4152-877e-e035f7d92d9a',
+);
+```
+
+Use the development environment only when testing against the dev backend:
+
+```dart
+await RahaAdsense.setup(
+  appId: '743e8c4b-08e0-4152-877e-e035f7d92d9a',
+  environment: RahaAdsenseEnvironment.development,
 );
 ```
 
