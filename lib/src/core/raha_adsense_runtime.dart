@@ -53,24 +53,15 @@ final class RahaAdsenseRuntime {
       signals: signals,
       cancelToken: cancelToken,
     );
-    if (decision == null) return null;
-    final resolved = _resolveCommon(placement, decision);
-    final asset = _requireImageAsset(decision, RahaAdDecisionFormat.banner);
-    if (asset.width != size.width || asset.height != size.height) {
+    final ad = _buildAdResponse(placement, decision);
+    if (ad == null) return null;
+    if (ad is! RahaBannerAdResponse) {
       throw const RahaAdsException(
-        RahaAdsErrorCode.unsupportedCreative,
-        'Banner creative dimensions do not match the requested size.',
+        RahaAdsErrorCode.invalidResponse,
+        'Expected a banner ad response.',
       );
     }
-    return buildRahaBannerAdResponse(
-      info: resolved.info,
-      isClickable: resolved.isClickable,
-      imageUrl: _resolver.resolveAsset(asset.url),
-      width: asset.width,
-      height: asset.height,
-      recordImpression: () => _recordImpression(resolved),
-      openClick: () => _openClick(resolved),
-    );
+    return ad;
   }
 
   Future<RahaVideoAdResponse?> requestVideoAd({
@@ -84,18 +75,15 @@ final class RahaAdsenseRuntime {
       signals: signals,
       cancelToken: cancelToken,
     );
-    if (decision == null) return null;
-    final resolved = _resolveCommon(placement, decision);
-    final asset = _requireVideoAsset(decision);
-    return buildRahaVideoAdResponse(
-      info: resolved.info,
-      isClickable: resolved.isClickable,
-      videoUrl: _resolver.resolveAsset(asset.url),
-      posterUrl: _optionalAssetUrl(asset.posterUrl),
-      duration: Duration(seconds: asset.duration),
-      recordImpression: () => _recordImpression(resolved),
-      openClick: () => _openClick(resolved),
-    );
+    final ad = _buildAdResponse(placement, decision);
+    if (ad == null) return null;
+    if (ad is! RahaVideoAdResponse) {
+      throw const RahaAdsException(
+        RahaAdsErrorCode.invalidResponse,
+        'Expected a video ad response.',
+      );
+    }
+    return ad;
   }
 
   Future<RahaInterstitialAdResponse?> requestInterstitialAd({
@@ -109,21 +97,15 @@ final class RahaAdsenseRuntime {
       signals: signals,
       cancelToken: cancelToken,
     );
-    if (decision == null) return null;
-    final resolved = _resolveCommon(placement, decision);
-    final asset = _requireImageAsset(
-      decision,
-      RahaAdDecisionFormat.interstitial,
-    );
-    return buildRahaInterstitialAdResponse(
-      info: resolved.info,
-      isClickable: resolved.isClickable,
-      imageUrl: _resolver.resolveAsset(asset.url),
-      width: asset.width,
-      height: asset.height,
-      recordImpression: () => _recordImpression(resolved),
-      openClick: () => _openClick(resolved),
-    );
+    final ad = _buildAdResponse(placement, decision);
+    if (ad == null) return null;
+    if (ad is! RahaInterstitialAdResponse) {
+      throw const RahaAdsException(
+        RahaAdsErrorCode.invalidResponse,
+        'Expected an interstitial ad response.',
+      );
+    }
+    return ad;
   }
 
   Future<RahaNativeAdResponse?> requestNativeAd({
@@ -137,20 +119,30 @@ final class RahaAdsenseRuntime {
       signals: signals,
       cancelToken: cancelToken,
     );
-    if (decision == null) return null;
-    final resolved = _resolveCommon(placement, decision);
-    final asset = _requireNativeAsset(decision);
-    return buildRahaNativeAdResponse(
-      info: resolved.info,
-      isClickable: resolved.isClickable,
-      title: asset.title.trim(),
-      description: _optionalText(asset.description),
-      imageUrl: _optionalAssetUrl(asset.imageUrl),
-      iconUrl: _optionalAssetUrl(asset.iconUrl),
-      cta: _optionalText(asset.cta),
-      recordImpression: () => _recordImpression(resolved),
-      openClick: () => _openClick(resolved),
+    final ad = _buildAdResponse(placement, decision);
+    if (ad == null) return null;
+    if (ad is! RahaNativeAdResponse) {
+      throw const RahaAdsException(
+        RahaAdsErrorCode.invalidResponse,
+        'Expected a native ad response.',
+      );
+    }
+    return ad;
+  }
+
+  Future<RahaAdResponse?> requestAdByPlacementId({
+    required String placementId,
+    required Map<String, Object?> signals,
+    CancelToken? cancelToken,
+  }) async {
+    final registry = await _getRegistry(cancelToken: cancelToken);
+    final placement = registry.resolveById(placementId);
+    final decision = await _requestDecision(
+      placement: placement,
+      signals: signals,
+      cancelToken: cancelToken,
     );
+    return _buildAdResponse(placement, decision);
   }
 
   void dispose() {
@@ -213,7 +205,6 @@ final class RahaAdsenseRuntime {
       );
     }
     final registry = PlacementRegistry(app: matches.single);
-    _validatePlacementUniqueness(registry);
     _registry = registry;
     _inventoryLoadedAt = DateTime.now();
     return registry;
@@ -243,6 +234,128 @@ final class RahaAdsenseRuntime {
       impressionEventId: _uuid.v4(),
       isClickable: decision.clickUrl != null,
     );
+  }
+
+  RahaAdResponse? _buildAdResponse(
+    RahaPlacement placement,
+    RahaAdDecisionDto? decision,
+  ) {
+    if (decision == null) return null;
+    final resolved = _resolveCommon(placement, decision);
+    return switch (placement.format) {
+      RahaInventoryPlacementFormat.banner => _buildBannerAdResponse(
+          placement,
+          decision,
+          resolved,
+        ),
+      RahaInventoryPlacementFormat.video => _buildVideoAdResponse(
+          decision,
+          resolved,
+        ),
+      RahaInventoryPlacementFormat.interstitial =>
+        _buildInterstitialAdResponse(decision, resolved),
+      RahaInventoryPlacementFormat.native => _buildNativeAdResponse(
+          decision,
+          resolved,
+        ),
+      RahaInventoryPlacementFormat.unknown => throw const RahaAdsException(
+          RahaAdsErrorCode.invalidResponse,
+          'Unsupported placement format.',
+        ),
+    };
+  }
+
+  RahaBannerAdResponse _buildBannerAdResponse(
+    RahaPlacement placement,
+    RahaAdDecisionDto decision,
+    RahaResolvedAd resolved,
+  ) {
+    final asset = _requireImageAsset(decision, RahaAdDecisionFormat.banner);
+    _validateBannerCreativeSize(placement, asset);
+    return buildRahaBannerAdResponse(
+      info: resolved.info,
+      isClickable: resolved.isClickable,
+      imageUrl: _resolver.resolveAsset(asset.url),
+      width: asset.width,
+      height: asset.height,
+      recordImpression: () => _recordImpression(resolved),
+      openClick: () => _openClick(resolved),
+    );
+  }
+
+  RahaVideoAdResponse _buildVideoAdResponse(
+    RahaAdDecisionDto decision,
+    RahaResolvedAd resolved,
+  ) {
+    final asset = _requireVideoAsset(decision);
+    return buildRahaVideoAdResponse(
+      info: resolved.info,
+      isClickable: resolved.isClickable,
+      videoUrl: _resolver.resolveAsset(asset.url),
+      posterUrl: _optionalAssetUrl(asset.posterUrl),
+      duration: Duration(seconds: asset.duration),
+      recordImpression: () => _recordImpression(resolved),
+      openClick: () => _openClick(resolved),
+    );
+  }
+
+  RahaInterstitialAdResponse _buildInterstitialAdResponse(
+    RahaAdDecisionDto decision,
+    RahaResolvedAd resolved,
+  ) {
+    final asset = _requireImageAsset(
+      decision,
+      RahaAdDecisionFormat.interstitial,
+    );
+    return buildRahaInterstitialAdResponse(
+      info: resolved.info,
+      isClickable: resolved.isClickable,
+      imageUrl: _resolver.resolveAsset(asset.url),
+      width: asset.width,
+      height: asset.height,
+      recordImpression: () => _recordImpression(resolved),
+      openClick: () => _openClick(resolved),
+    );
+  }
+
+  RahaNativeAdResponse _buildNativeAdResponse(
+    RahaAdDecisionDto decision,
+    RahaResolvedAd resolved,
+  ) {
+    final asset = _requireNativeAsset(decision);
+    return buildRahaNativeAdResponse(
+      info: resolved.info,
+      isClickable: resolved.isClickable,
+      title: asset.title.trim(),
+      description: _optionalText(asset.description),
+      imageUrl: _optionalAssetUrl(asset.imageUrl),
+      iconUrl: _optionalAssetUrl(asset.iconUrl),
+      cta: _optionalText(asset.cta),
+      recordImpression: () => _recordImpression(resolved),
+      openClick: () => _openClick(resolved),
+    );
+  }
+
+  void _validateBannerCreativeSize(
+    RahaPlacement placement,
+    RahaImageAdAssetDto asset,
+  ) {
+    final size = placement.size?.trim().toLowerCase();
+    if (size == null || size.isEmpty) return;
+    RahaBannerSize? expected;
+    for (final value in RahaBannerSize.values) {
+      if (value.wireValue == size) {
+        expected = value;
+        break;
+      }
+    }
+    if (expected == null) return;
+    if (asset.width != expected.width || asset.height != expected.height) {
+      throw const RahaAdsException(
+        RahaAdsErrorCode.unsupportedCreative,
+        'Banner creative dimensions do not match the requested size.',
+      );
+    }
   }
 
   /// Ensure the decision contains an image asset for the expected ad format.
@@ -416,54 +529,6 @@ final class RahaAdsenseRuntime {
       throw const RahaAdsException(
         RahaAdsErrorCode.clickLaunch,
         'Unable to open Raha click destination.',
-      );
-    }
-  }
-
-  void _validatePlacementUniqueness(PlacementRegistry registry) {
-    for (final size in RahaBannerSize.values) {
-      _rejectDuplicateFormatSize(registry, size);
-    }
-    _rejectDuplicateFormat(registry, RahaInventoryPlacementFormat.video);
-    _rejectDuplicateFormat(registry, RahaInventoryPlacementFormat.native);
-    _rejectDuplicateFormat(
-      registry,
-      RahaInventoryPlacementFormat.interstitial,
-    );
-  }
-
-  void _rejectDuplicateFormatSize(
-    PlacementRegistry registry,
-    RahaBannerSize size,
-  ) {
-    final matches = registry.app.placements
-        .where(
-          (placement) =>
-              placement.format == RahaInventoryPlacementFormat.banner &&
-              placement.size?.trim().toLowerCase() == size.wireValue,
-        )
-        .length;
-    if (matches > 1) {
-      throw RahaAdsException(
-        RahaAdsErrorCode.ambiguousPlacement,
-        'Multiple banner placement ${size.wireValue} values are configured '
-        'for app ${registry.app.id}.',
-      );
-    }
-  }
-
-  void _rejectDuplicateFormat(
-    PlacementRegistry registry,
-    RahaInventoryPlacementFormat format,
-  ) {
-    final matches = registry.app.placements
-        .where((placement) => placement.format == format)
-        .length;
-    if (matches > 1) {
-      throw RahaAdsException(
-        RahaAdsErrorCode.ambiguousPlacement,
-        'Multiple ${format.name} placement values are configured for app '
-        '${registry.app.id}.',
       );
     }
   }

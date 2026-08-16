@@ -93,6 +93,19 @@ if (ad is RahaInterstitialAdResponse && context.mounted) {
 }
 ```
 
+### Placement ID Request
+
+```dart
+final ad = await RahaAdsense.requestByPlacementId(
+  placementId: 'your-placement-id',
+  signals: const {'screen': 'home'},
+);
+
+if (ad is RahaBannerAdResponse) {
+  // Render or handle banner response.
+}
+```
+
 ## Custom Click Handling
 
 For embedded systems, STBs, or custom shells, you can provide a custom click
@@ -113,6 +126,8 @@ await RahaAdsense.setup(
 - `RahaAdsense.setup(...)` — Initialize the SDK with your Raha app ID.
 - `RahaAdsense.adRequest(...)` — Request an ad response for interstitials or
   other manual ad flows.
+- `RahaAdsense.requestByPlacementId(...)` — Request an ad response for a
+  specific Raha placement ID.
 - `RahaBannerAd` — Widget for responsive banner ad placements.
 - `RahaVideoAd` — Widget for video ad placements.
 - `RahaNativeAd` — Widget for native ad rendering.

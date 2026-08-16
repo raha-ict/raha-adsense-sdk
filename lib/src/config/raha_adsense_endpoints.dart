@@ -4,9 +4,11 @@ final class RahaAdsenseEndpoints {
   const RahaAdsenseEndpoints._({
     required this.apiOrigin,
     required this.cdnBaseUrl,
+    required this.allowInsecureHttp,
   });
 
-  static final RahaAdsenseEndpoints production = RahaAdsenseEndpoints._validated(
+  static final RahaAdsenseEndpoints production =
+      RahaAdsenseEndpoints._validated(
     apiOrigin: Uri.parse('https://api.adsense.raha.af'),
     cdnBaseUrl: Uri.parse('https://cdn.raha.af/adsense/'),
     allowInsecureHttp: false,
@@ -21,6 +23,7 @@ final class RahaAdsenseEndpoints {
 
   final Uri apiOrigin;
   final Uri cdnBaseUrl;
+  final bool allowInsecureHttp;
 
   factory RahaAdsenseEndpoints._validated({
     required Uri apiOrigin,
@@ -42,6 +45,7 @@ final class RahaAdsenseEndpoints {
     return RahaAdsenseEndpoints._(
       apiOrigin: apiOrigin,
       cdnBaseUrl: cdnBaseUrl,
+      allowInsecureHttp: allowInsecureHttp,
     );
   }
 

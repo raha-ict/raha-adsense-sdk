@@ -79,6 +79,19 @@ abstract final class RahaAdsense {
     };
   }
 
+  /// Request a single ad response for an exact Raha [placementId].
+  ///
+  /// The placement must belong to the app inventory loaded during [setup].
+  static Future<RahaAdResponse?> requestByPlacementId({
+    required String placementId,
+    Map<String, Object?> signals = const <String, Object?>{},
+  }) {
+    return runtime.requestAdByPlacementId(
+      placementId: placementId,
+      signals: signals,
+    );
+  }
+
   /// Returns the active runtime instance.
   ///
   /// Throws [RahaAdsException] if the package has not yet been initialized.

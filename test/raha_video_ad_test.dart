@@ -17,4 +17,8 @@ void main() {
     expect(RahaBannerSize.mobile320x50.wireValue, '320x50');
     expect(RahaBannerSize.wideSkyscraper160x600.wireValue, '160x600');
   });
+
+  test('public API exports placement id request method', () {
+    expect(RahaAdsense.requestByPlacementId, isA<Function>());
+  });
 }

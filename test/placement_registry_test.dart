@@ -54,6 +54,46 @@ void main() {
     expect(registry.resolveNative().id, 'native-id');
     expect(registry.resolveInterstitial().id, 'interstitial-id');
   });
+
+  test('resolves placement by exact trimmed id', () {
+    final registry = PlacementRegistry(
+      app: _app([_format('native-id', RahaInventoryPlacementFormat.native)]),
+    );
+
+    expect(registry.resolveById(' native-id ').id, 'native-id');
+  });
+
+  test('rejects empty placement id', () {
+    final registry = PlacementRegistry(app: _app([]));
+
+    expect(
+      () => registry.resolveById('  '),
+      throwsA(
+        isA<RahaAdsException>().having(
+          (error) => error.code,
+          'code',
+          RahaAdsErrorCode.placementNotFound,
+        ),
+      ),
+    );
+  });
+
+  test('rejects missing placement id', () {
+    final registry = PlacementRegistry(
+      app: _app([_format('native-id', RahaInventoryPlacementFormat.native)]),
+    );
+
+    expect(
+      () => registry.resolveById('missing-id'),
+      throwsA(
+        isA<RahaAdsException>().having(
+          (error) => error.code,
+          'code',
+          RahaAdsErrorCode.placementNotFound,
+        ),
+      ),
+    );
+  });
 }
 
 RahaPublisherApp _app(List<RahaPlacement> placements) {

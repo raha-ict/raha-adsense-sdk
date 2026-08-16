@@ -85,8 +85,11 @@ final class RahaUrlResolver {
   }
 
   void _requireSafeAbsolute(Uri uri, String label) {
+    final scheme = uri.scheme.toLowerCase();
+    final validScheme =
+        scheme == 'https' || (endpoints.allowInsecureHttp && scheme == 'http');
     if (!uri.isAbsolute ||
-        uri.scheme.toLowerCase() != 'https' ||
+        !validScheme ||
         uri.host.isEmpty ||
         uri.userInfo.isNotEmpty) {
       throw RahaAdsException(

@@ -40,6 +40,21 @@ final class PlacementRegistry {
     return _requireOne(matches, 'native placement');
   }
 
+  RahaPlacement resolveById(String placementId) {
+    final normalized = placementId.trim();
+    if (normalized.isEmpty) {
+      throw RahaAdsException(
+        RahaAdsErrorCode.placementNotFound,
+        'No placement is configured for app ${app.id}.',
+      );
+    }
+    final matches = app.placements
+        .where((placement) => placement.id == normalized)
+        .toList(growable: false);
+
+    return _requireOne(matches, 'placement $normalized');
+  }
+
   List<RahaPlacement> _formatMatches(RahaInventoryPlacementFormat format) {
     return app.placements
         .where((placement) => placement.format == format)
