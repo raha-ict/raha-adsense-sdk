@@ -66,12 +66,26 @@ void main() {
       throwsA(isA<FormatException>()),
     );
   });
+
+  test('missing, null, empty, and whitespace tracking URLs are optional', () {
+    for (final value in <Object?>[null, '', '   ']) {
+      final json = Map<String, Object?>.from(bannerDecisionJson)
+        ..remove('clickTrackingUrl');
+      if (value != null) json['clickTrackingUrl'] = value;
+
+      final decision = RahaAdDecisionDto.fromJson(json);
+
+      expect(
+        decision.clickTrackingUrl,
+        value is String ? value.trim() : null,
+      );
+    }
+  });
 }
 
 const bannerDecisionJson = <String, Object?>{
   'id': 'ad_123',
   'format': 'banner',
-  'clickUrl': 'https://advertiser.example.com/landing',
   'impressionUrl': '/tracking/impression/creative_123?placement=p1',
   'clickTrackingUrl': '/tracking/click/creative_123?placement=p1',
   'asset': <String, Object?>{
@@ -84,7 +98,6 @@ const bannerDecisionJson = <String, Object?>{
 const videoDecisionJson = <String, Object?>{
   'id': 'ad_123',
   'format': 'video',
-  'clickUrl': 'https://advertiser.example.com/landing',
   'impressionUrl': '/tracking/impression/creative_123?placement=p1',
   'clickTrackingUrl': '/tracking/click/creative_123?placement=p1',
   'asset': <String, Object?>{
@@ -97,7 +110,6 @@ const videoDecisionJson = <String, Object?>{
 const interstitialDecisionJson = <String, Object?>{
   'id': 'ad_123',
   'format': 'interstitial',
-  'clickUrl': 'https://advertiser.example.com/landing',
   'impressionUrl': '/tracking/impression/creative_123?placement=p1',
   'clickTrackingUrl': '/tracking/click/creative_123?placement=p1',
   'asset': <String, Object?>{
@@ -110,7 +122,6 @@ const interstitialDecisionJson = <String, Object?>{
 const nativeDecisionJson = <String, Object?>{
   'id': 'ad_123',
   'format': 'native',
-  'clickUrl': 'https://advertiser.example.com/landing',
   'impressionUrl': '/tracking/impression/creative_123?placement=p1',
   'clickTrackingUrl': '/tracking/click/creative_123?placement=p1',
   'asset': <String, Object?>{

@@ -35,6 +35,7 @@ void main() {
     expect(banner.info.format, RahaAdFormat.banner);
     expect(banner.width, 320);
     expect(banner.height, 50);
+    expect(banner.isClickable, isTrue);
     expect(server.requestedPlacementIds, contains('banner-placement'));
   });
 
@@ -59,6 +60,27 @@ void main() {
     expect(video, isA<RahaVideoAdResponse>());
     expect(native, isA<RahaNativeAdResponse>());
     expect(interstitial, isA<RahaInterstitialAdResponse>());
+    expect((video as RahaVideoAdResponse).isClickable, isTrue);
+    expect((native as RahaNativeAdResponse).isClickable, isTrue);
+    expect((interstitial as RahaInterstitialAdResponse).isClickable, isTrue);
+  });
+
+  test('returns non-clickable ad when tracking URL is absent', () async {
+    final runtime = await _runtime(server);
+    addTearDown(runtime.dispose);
+
+    final ad = await runtime.requestAdByPlacementId(
+      placementId: 'non-clickable-placement',
+      signals: const {},
+    );
+
+    expect(ad, isA<RahaNativeAdResponse>());
+    final native = ad as RahaNativeAdResponse;
+    expect(native.isClickable, isFalse);
+    await expectLater(
+      native.openClick(),
+      throwsA(isA<RahaAdsException>()),
+    );
   });
 
   test('returns null when placement request has no fill', () async {
@@ -206,6 +228,7 @@ Map<String, Object?> _decisionFor(String placementId) {
     'video-placement' => _videoDecision,
     'native-placement' => _nativeDecision,
     'interstitial-placement' => _interstitialDecision,
+    'non-clickable-placement' => _nonClickableNativeDecision,
     'mismatch-placement' => _videoDecision,
     _ => _bannerDecision,
   };
@@ -257,6 +280,12 @@ const _inventoryJson = <String, Object?>{
           'format': 'native',
           'currency': 'AFN',
         },
+        {
+          'id': 'non-clickable-placement',
+          'name': 'Non Clickable',
+          'format': 'native',
+          'currency': 'AFN',
+        },
       ],
     },
   ],
@@ -265,7 +294,6 @@ const _inventoryJson = <String, Object?>{
 const _bannerDecision = <String, Object?>{
   'id': 'banner-ad',
   'format': 'banner',
-  'clickUrl': 'https://advertiser.example.com/landing',
   'impressionUrl': '/tracking/impression/banner-ad',
   'clickTrackingUrl': '/tracking/click/banner-ad',
   'asset': {
@@ -278,7 +306,6 @@ const _bannerDecision = <String, Object?>{
 const _videoDecision = <String, Object?>{
   'id': 'video-ad',
   'format': 'video',
-  'clickUrl': 'https://advertiser.example.com/landing',
   'impressionUrl': '/tracking/impression/video-ad',
   'clickTrackingUrl': '/tracking/click/video-ad',
   'asset': {
@@ -291,7 +318,6 @@ const _videoDecision = <String, Object?>{
 const _nativeDecision = <String, Object?>{
   'id': 'native-ad',
   'format': 'native',
-  'clickUrl': 'https://advertiser.example.com/landing',
   'impressionUrl': '/tracking/impression/native-ad',
   'clickTrackingUrl': '/tracking/click/native-ad',
   'asset': {
@@ -306,12 +332,24 @@ const _nativeDecision = <String, Object?>{
 const _interstitialDecision = <String, Object?>{
   'id': 'interstitial-ad',
   'format': 'interstitial',
-  'clickUrl': 'https://advertiser.example.com/landing',
   'impressionUrl': '/tracking/impression/interstitial-ad',
   'clickTrackingUrl': '/tracking/click/interstitial-ad',
   'asset': {
     'url': 'interstitial.png',
     'width': 1080,
     'height': 1920,
+  },
+};
+
+const _nonClickableNativeDecision = <String, Object?>{
+  'id': 'non-clickable-ad',
+  'format': 'native',
+  'impressionUrl': '/tracking/impression/non-clickable-ad',
+  'asset': {
+    'title': 'Grow your business',
+    'description': 'Reach more customers.',
+    'imageUrl': 'native.jpg',
+    'iconUrl': 'icon.png',
+    'cta': 'Learn more',
   },
 };

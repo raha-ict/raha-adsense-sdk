@@ -136,7 +136,7 @@ await RahaAdsense.setup(
 ## Notes
 
 The package expects the Raha backend response format to include top-level
-fields like `id`, `format`, tracking URLs, optional `clickUrl`, and a
+fields like `id`, `format`, tracking URLs, and a
 format-specific `asset` object.
 
 ## Example

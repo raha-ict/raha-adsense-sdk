@@ -192,7 +192,6 @@ final class RahaAdDecisionDto {
   const RahaAdDecisionDto({
     required this.id,
     required this.format,
-    this.clickUrl,
     required this.impressionUrl,
     required this.clickTrackingUrl,
     required this.asset,
@@ -227,19 +226,17 @@ final class RahaAdDecisionDto {
     return RahaAdDecisionDto(
       id: _nonEmptyString(json['id'], 'id'),
       format: format,
-      clickUrl: _optionalNonEmptyString(json['clickUrl'], 'clickUrl'),
       impressionUrl: _nonEmptyString(json['impressionUrl'], 'impressionUrl'),
       clickTrackingUrl:
-          _nonEmptyString(json['clickTrackingUrl'], 'clickTrackingUrl'),
+          _optionalNonEmptyString(json['clickTrackingUrl'], 'clickTrackingUrl'),
       asset: asset,
     );
   }
 
   final String id;
   final RahaAdDecisionFormat format;
-  final String? clickUrl;
   final String impressionUrl;
-  final String clickTrackingUrl;
+  final String? clickTrackingUrl;
   final RahaAdAssetDto asset;
 }
 
@@ -302,7 +299,7 @@ final class RahaResolvedAd {
   final RahaAdInfo info;
   final RahaAdDecisionDto decision;
   final Uri impressionUri;
-  final Uri clickTrackingUri;
+  final Uri? clickTrackingUri;
   final String impressionEventId;
   final bool isClickable;
 }

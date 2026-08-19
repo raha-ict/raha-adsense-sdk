@@ -221,7 +221,7 @@ final class RahaAdsenseRuntime {
         'Ad decision format does not match the resolved placement.',
       );
     }
-    _validateClickUrl(decision.clickUrl);
+    final clickTrackingUrl = decision.clickTrackingUrl?.trim();
     return RahaResolvedAd(
       info: RahaAdInfo(
         adId: decision.id,
@@ -230,9 +230,11 @@ final class RahaAdsenseRuntime {
       ),
       decision: decision,
       impressionUri: _resolver.resolveTracking(decision.impressionUrl),
-      clickTrackingUri: _resolver.resolveTracking(decision.clickTrackingUrl),
+      clickTrackingUri: clickTrackingUrl == null || clickTrackingUrl.isEmpty
+          ? null
+          : _resolver.resolveTracking(clickTrackingUrl),
       impressionEventId: _uuid.v4(),
-      isClickable: decision.clickUrl != null,
+      isClickable: clickTrackingUrl != null && clickTrackingUrl.isNotEmpty,
     );
   }
 
@@ -409,32 +411,6 @@ final class RahaAdsenseRuntime {
     return normalized.isEmpty ? null : normalized;
   }
 
-  /// Validate the click URL included in the ad decision.
-  ///
-  /// A valid click URL must be absolute HTTPS with no user info.
-  void _validateClickUrl(String? value) {
-    if (value == null) return;
-    final Uri uri;
-    try {
-      uri = Uri.parse(value);
-    } on FormatException catch (error) {
-      throw RahaAdsException(
-        RahaAdsErrorCode.invalidResponse,
-        'Malformed click URL in ad response.',
-        cause: error,
-      );
-    }
-    if (!uri.isAbsolute ||
-        uri.scheme.toLowerCase() != 'https' ||
-        uri.host.isEmpty ||
-        uri.userInfo.isNotEmpty) {
-      throw const RahaAdsException(
-        RahaAdsErrorCode.invalidResponse,
-        'Invalid click URL in ad response.',
-      );
-    }
-  }
-
   RahaAdDecisionFormat _expectedDecisionFormat(
     RahaInventoryPlacementFormat format,
   ) {
@@ -465,8 +441,15 @@ final class RahaAdsenseRuntime {
   }
 
   Future<void> _openClick(RahaResolvedAd ad) async {
+    final clickTrackingUri = ad.clickTrackingUri;
+    if (clickTrackingUri == null) {
+      throw const RahaAdsException(
+        RahaAdsErrorCode.clickLaunch,
+        'This ad has no click destination.',
+      );
+    }
     final result = await _api.trackClick(
-      ad.clickTrackingUri,
+      clickTrackingUri,
       eventId: _uuid.v4(),
     );
     if (!result.isValid) {
