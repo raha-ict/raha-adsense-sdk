@@ -59,17 +59,69 @@ void main() {
       os: 'android',
       language: 'ps',
       dayOfWeek: 'Saturday',
-      timeOfDay: '23:40',
+      timeOfDay: 'night',
     );
 
     expect(result, {
       'device_type': 'phone',
-      'os': 'android',
-      'language': 'ps',
-      'day_of_week': 'Saturday',
-      'time_of_day': '23:40',
+      'os': 'ANDROID',
+      'language': 'PASHTO',
+      'day_of_week': 'SATURDAY',
+      'time_of_day': 'NIGHT',
       'screen': 'home',
     });
+  });
+
+  test('preserves publisher signal override casing', () {
+    final result = mergeRequestSignals(
+      signals: const {
+        'os': 'customOs',
+        'language': 'customLower',
+        'day_of_week': 'customDay',
+        'time_of_day': 'customTime',
+      },
+      deviceType: 'phone',
+      os: 'android',
+      language: 'ps',
+      dayOfWeek: 'Saturday',
+      timeOfDay: 'night',
+    );
+
+    expect(result, {
+      'device_type': 'phone',
+      'os': 'customOs',
+      'language': 'customLower',
+      'day_of_week': 'customDay',
+      'time_of_day': 'customTime',
+    });
+  });
+
+  test('normalizes known language signal values', () {
+    expect(normalizeLanguageSignal('fa'), 'farsi');
+    expect(normalizeLanguageSignal('ps'), 'pashto');
+    expect(normalizeLanguageSignal('en'), 'english');
+    expect(normalizeLanguageSignal('zh'), 'chinese');
+    expect(normalizeLanguageSignal('zn'), 'chinese');
+    expect(normalizeLanguageSignal(' EN_us '), 'english');
+    expect(normalizeLanguageSignal('Dari'), 'dari');
+    expect(normalizeLanguageSignal('uz'), 'uzbek');
+  });
+
+  test('returns unknown for unsupported language signal values', () {
+    expect(normalizeLanguageSignal(''), 'unknown');
+    expect(normalizeLanguageSignal('  '), 'unknown');
+    expect(normalizeLanguageSignal('klingon'), 'unknown');
+  });
+
+  test('maps request time to Afghanistan TV style day parts', () {
+    expect(timeOfDaySignal(DateTime(2026, 1, 1, 3, 59)), 'night');
+    expect(timeOfDaySignal(DateTime(2026, 1, 1, 4)), 'morning');
+    expect(timeOfDaySignal(DateTime(2026, 1, 1, 11, 59)), 'morning');
+    expect(timeOfDaySignal(DateTime(2026, 1, 1, 12)), 'afternoon');
+    expect(timeOfDaySignal(DateTime(2026, 1, 1, 15, 59)), 'afternoon');
+    expect(timeOfDaySignal(DateTime(2026, 1, 1, 16)), 'evening');
+    expect(timeOfDaySignal(DateTime(2026, 1, 1, 19, 59)), 'evening');
+    expect(timeOfDaySignal(DateTime(2026, 1, 1, 20)), 'night');
   });
 
   test('allows passing device metadata through setup config', () {

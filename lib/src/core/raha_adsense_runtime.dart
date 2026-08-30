@@ -1,6 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/widgets.dart';
-import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
@@ -221,20 +219,14 @@ final class RahaAdsenseRuntime {
     String? dayOfWeek,
     String? timeOfDay,
   }) {
-    final locale = WidgetsBinding.instance.platformDispatcher.locale;
-    final now = DateTime.now();
-    final effectiveLanguage = language ??
-        (locale.languageCode.isNotEmpty ? locale.languageCode : 'en');
-    final effectiveDayOfWeek = dayOfWeek ?? DateFormat('EEEE').format(now);
-    final effectiveTimeOfDay = timeOfDay ?? DateFormat('HH:mm').format(now);
-
-    return <String, Object?>{
-      'device_type': deviceType,
-      'os': os,
-      'language': effectiveLanguage,
-      'day_of_week': effectiveDayOfWeek,
-      'time_of_day': effectiveTimeOfDay,
-    };
+    return mergeRequestSignals(
+      signals: const <String, Object?>{},
+      deviceType: deviceType,
+      os: os,
+      language: language,
+      dayOfWeek: dayOfWeek,
+      timeOfDay: timeOfDay,
+    );
   }
 
   /// Return the cached placement registry, refreshing it when needed.

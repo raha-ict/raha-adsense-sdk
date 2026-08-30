@@ -337,23 +337,102 @@ Map<String, Object?> mergeRequestSignals({
   String? dayOfWeek,
   String? timeOfDay,
 }) {
-  final locale = WidgetsBinding.instance.platformDispatcher.locale;
   final now = DateTime.now();
-  final effectiveLanguage =
-      language ?? (locale.languageCode.isNotEmpty ? locale.languageCode : 'en');
+  final effectiveLanguage = normalizeLanguageSignal(
+    language ?? _platformLanguageOrDefault(),
+  );
   final effectiveDayOfWeek = dayOfWeek ?? DateFormat('EEEE').format(now);
-  final effectiveTimeOfDay = timeOfDay ?? DateFormat('HH:mm').format(now);
+  final effectiveTimeOfDay = timeOfDay ?? timeOfDaySignal(now);
 
   final defaults = <String, Object?>{
     'device_type': deviceType,
-    'os': os,
-    'language': effectiveLanguage,
-    'day_of_week': effectiveDayOfWeek,
-    'time_of_day': effectiveTimeOfDay,
+    'os': os.toUpperCase(),
+    'language': effectiveLanguage.toUpperCase(),
+    'day_of_week': effectiveDayOfWeek.toUpperCase(),
+    'time_of_day': effectiveTimeOfDay.toUpperCase(),
   };
 
   return <String, Object?>{...defaults, ...signals};
 }
+
+String _platformLanguageOrDefault() {
+  try {
+    final locale = WidgetsBinding.instance.platformDispatcher.locale;
+    if (locale.languageCode.isNotEmpty) return locale.languageCode;
+    final languageTag = locale.toLanguageTag();
+    return languageTag.isNotEmpty ? languageTag : 'en';
+  } on FlutterError {
+    return 'en';
+  }
+}
+
+String normalizeLanguageSignal(String value) {
+  final normalized = value.trim().toLowerCase().replaceAll('_', '-');
+  if (normalized.isEmpty) return 'unknown';
+
+  final baseCode = normalized.split('-').first;
+  return _languageSignalNames[normalized] ??
+      _languageSignalNames[baseCode] ??
+      'unknown';
+}
+
+String timeOfDaySignal(DateTime value) {
+  final hour = value.hour;
+  if (hour >= 4 && hour < 12) return 'morning';
+  if (hour >= 12 && hour < 16) return 'afternoon';
+  if (hour >= 16 && hour < 20) return 'evening';
+  return 'night';
+}
+
+const _languageSignalNames = <String, String>{
+  'fa': 'farsi',
+  'fas': 'farsi',
+  'per': 'farsi',
+  'farsi': 'farsi',
+  'persian': 'farsi',
+  'ps': 'pashto',
+  'pus': 'pashto',
+  'pashto': 'pashto',
+  'en': 'english',
+  'eng': 'english',
+  'english': 'english',
+  'zh': 'chinese',
+  'zho': 'chinese',
+  'chi': 'chinese',
+  'zn': 'chinese',
+  'chinese': 'chinese',
+  'ar': 'arabic',
+  'ara': 'arabic',
+  'arabic': 'arabic',
+  'ur': 'urdu',
+  'urd': 'urdu',
+  'urdu': 'urdu',
+  'hi': 'hindi',
+  'hin': 'hindi',
+  'hindi': 'hindi',
+  'ru': 'russian',
+  'rus': 'russian',
+  'russian': 'russian',
+  'fr': 'french',
+  'fra': 'french',
+  'fre': 'french',
+  'french': 'french',
+  'de': 'german',
+  'deu': 'german',
+  'ger': 'german',
+  'german': 'german',
+  'es': 'spanish',
+  'spa': 'spanish',
+  'spanish': 'spanish',
+  'tr': 'turkish',
+  'tur': 'turkish',
+  'turkish': 'turkish',
+  'uz': 'uzbek',
+  'uzb': 'uzbek',
+  'uzbek': 'uzbek',
+  'prs': 'dari',
+  'dari': 'dari',
+};
 
 Map<String, Object?> validateAndNormalizePublisherSignals(
   Map<String, Object?> signals,
