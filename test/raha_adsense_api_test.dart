@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/intl.dart';
 import 'package:pretty_dio_logger/pretty_dio_logger.dart';
 import 'package:raha_adsense/src/config/raha_adsense_config.dart';
 import 'package:raha_adsense/src/config/raha_adsense_endpoints.dart';
@@ -124,6 +125,52 @@ void main() {
     expect(timeOfDaySignal(DateTime(2026, 1, 1, 20)), 'night');
   });
 
+  test('applies difference time to generated time of day', () {
+    final now = DateTime.now();
+    final nextMorning = _nextTimeAt(hour: 4, minute: 1, from: now);
+    final result = mergeRequestSignals(
+      signals: const {},
+      deviceType: 'phone',
+      os: 'android',
+      language: 'en',
+      differenceTime: nextMorning.difference(now),
+    );
+
+    expect(result['time_of_day'], 'MORNING');
+  });
+
+  test('applies difference time to generated day of week', () {
+    final now = DateTime.now();
+    final tomorrowNoon = DateTime(now.year, now.month, now.day + 1, 12);
+    final result = mergeRequestSignals(
+      signals: const {},
+      deviceType: 'phone',
+      os: 'android',
+      language: 'en',
+      differenceTime: tomorrowNoon.difference(now),
+    );
+
+    expect(
+      result['day_of_week'],
+      DateFormat('EEEE').format(tomorrowNoon).toUpperCase(),
+    );
+  });
+
+  test('explicit day and time values override difference time', () {
+    final result = mergeRequestSignals(
+      signals: const {},
+      deviceType: 'phone',
+      os: 'android',
+      language: 'en',
+      dayOfWeek: 'Friday',
+      timeOfDay: 'evening',
+      differenceTime: const Duration(days: 2, hours: 4),
+    );
+
+    expect(result['day_of_week'], 'FRIDAY');
+    expect(result['time_of_day'], 'EVENING');
+  });
+
   test('allows passing device metadata through setup config', () {
     final config = RahaAdsenseConfig.production(
       appId: '743e8c4b-08e0-4152-877e-e035f7d92d9a',
@@ -196,4 +243,15 @@ void main() {
     expect(result.isValid, isTrue);
     expect(result.redirectUrl, 'https://advertiser.example.com/path');
   });
+}
+
+DateTime _nextTimeAt({
+  required int hour,
+  required int minute,
+  required DateTime from,
+}) {
+  final candidate = DateTime(from.year, from.month, from.day, hour, minute);
+  return candidate.isAfter(from)
+      ? candidate
+      : candidate.add(const Duration(days: 1));
 }

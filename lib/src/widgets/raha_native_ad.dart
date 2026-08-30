@@ -18,6 +18,7 @@ class RahaNativeAd extends StatefulWidget {
   const RahaNativeAd({
     super.key,
     this.signals = const <String, Object?>{},
+    this.differenceTime,
     this.onLoaded,
     this.onImpression,
     this.onClick,
@@ -26,6 +27,9 @@ class RahaNativeAd extends StatefulWidget {
 
   /// Optional contextual signals included with the native ad request.
   final Map<String, Object?> signals;
+
+  /// Optional time offset for generated day and time request signals.
+  final Duration? differenceTime;
 
   /// Called when the native ad is loaded successfully.
   final ValueChanged<RahaAdInfo>? onLoaded;
@@ -65,7 +69,8 @@ class _RahaNativeAdState extends State<RahaNativeAd>
   @override
   void didUpdateWidget(covariant RahaNativeAd oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.signals != widget.signals) {
+    if (oldWidget.signals != widget.signals ||
+        oldWidget.differenceTime != widget.differenceTime) {
       _reset();
       _load();
     }
@@ -101,6 +106,7 @@ class _RahaNativeAdState extends State<RahaNativeAd>
     try {
       final ad = await RahaAdsense.runtime.requestNativeAd(
         signals: widget.signals,
+        differenceTime: widget.differenceTime,
         cancelToken: _cancelToken,
       );
       if (!mounted || _cancelToken.isCancelled) return;

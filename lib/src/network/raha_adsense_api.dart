@@ -336,13 +336,16 @@ Map<String, Object?> mergeRequestSignals({
   String? language,
   String? dayOfWeek,
   String? timeOfDay,
+  Duration? differenceTime,
 }) {
-  final now = DateTime.now();
+  final currentTime = DateTime.now();
+  final signalTime =
+      differenceTime == null ? currentTime : currentTime.add(differenceTime);
   final effectiveLanguage = normalizeLanguageSignal(
     language ?? _platformLanguageOrDefault(),
   );
-  final effectiveDayOfWeek = dayOfWeek ?? DateFormat('EEEE').format(now);
-  final effectiveTimeOfDay = timeOfDay ?? timeOfDaySignal(now);
+  final effectiveDayOfWeek = dayOfWeek ?? DateFormat('EEEE').format(signalTime);
+  final effectiveTimeOfDay = timeOfDay ?? timeOfDaySignal(signalTime);
 
   final defaults = <String, Object?>{
     'device_type': deviceType,

@@ -2,6 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:raha_adsense/raha_adsense.dart';
 
 void main() {
+  tearDown(RahaAdsense.resetForTesting);
+
   test('public API exports v2 formats', () {
     expect(RahaAdFormat.values, [
       RahaAdFormat.banner,
@@ -20,5 +22,27 @@ void main() {
 
   test('public API exports placement id request method', () {
     expect(RahaAdsense.requestByPlacementId, isA<Function>());
+  });
+
+  testWidgets('video reloads when difference time changes', (tester) async {
+    var errors = 0;
+
+    await tester.pumpWidget(
+      RahaVideoAd(
+        differenceTime: Duration.zero,
+        onError: (_) => errors++,
+      ),
+    );
+    await tester.pump();
+
+    await tester.pumpWidget(
+      RahaVideoAd(
+        differenceTime: const Duration(hours: 1),
+        onError: (_) => errors++,
+      ),
+    );
+    await tester.pump();
+
+    expect(errors, 2);
   });
 }

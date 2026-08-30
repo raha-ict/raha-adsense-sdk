@@ -47,6 +47,7 @@ final class RahaAdsenseRuntime {
     String? language,
     String? dayOfWeek,
     String? timeOfDay,
+    Duration? differenceTime,
     CancelToken? cancelToken,
   }) async {
     final registry = await _getRegistry(cancelToken: cancelToken);
@@ -60,6 +61,7 @@ final class RahaAdsenseRuntime {
         language: language,
         dayOfWeek: dayOfWeek,
         timeOfDay: timeOfDay,
+        differenceTime: differenceTime,
       ),
       cancelToken: cancelToken,
     );
@@ -79,6 +81,7 @@ final class RahaAdsenseRuntime {
     String? language,
     String? dayOfWeek,
     String? timeOfDay,
+    Duration? differenceTime,
     CancelToken? cancelToken,
   }) async {
     final registry = await _getRegistry(cancelToken: cancelToken);
@@ -92,6 +95,7 @@ final class RahaAdsenseRuntime {
         language: language,
         dayOfWeek: dayOfWeek,
         timeOfDay: timeOfDay,
+        differenceTime: differenceTime,
       ),
       cancelToken: cancelToken,
     );
@@ -111,6 +115,7 @@ final class RahaAdsenseRuntime {
     String? language,
     String? dayOfWeek,
     String? timeOfDay,
+    Duration? differenceTime,
     CancelToken? cancelToken,
   }) async {
     final registry = await _getRegistry(cancelToken: cancelToken);
@@ -124,6 +129,7 @@ final class RahaAdsenseRuntime {
         language: language,
         dayOfWeek: dayOfWeek,
         timeOfDay: timeOfDay,
+        differenceTime: differenceTime,
       ),
       cancelToken: cancelToken,
     );
@@ -143,6 +149,7 @@ final class RahaAdsenseRuntime {
     String? language,
     String? dayOfWeek,
     String? timeOfDay,
+    Duration? differenceTime,
     CancelToken? cancelToken,
   }) async {
     final registry = await _getRegistry(cancelToken: cancelToken);
@@ -156,6 +163,7 @@ final class RahaAdsenseRuntime {
         language: language,
         dayOfWeek: dayOfWeek,
         timeOfDay: timeOfDay,
+        differenceTime: differenceTime,
       ),
       cancelToken: cancelToken,
     );
@@ -176,6 +184,7 @@ final class RahaAdsenseRuntime {
     String? language,
     String? dayOfWeek,
     String? timeOfDay,
+    Duration? differenceTime,
     CancelToken? cancelToken,
   }) async {
     final registry = await _getRegistry(cancelToken: cancelToken);
@@ -189,6 +198,7 @@ final class RahaAdsenseRuntime {
         language: language,
         dayOfWeek: dayOfWeek,
         timeOfDay: timeOfDay,
+        differenceTime: differenceTime,
       ),
       cancelToken: cancelToken,
     );
@@ -218,6 +228,7 @@ final class RahaAdsenseRuntime {
     String? language,
     String? dayOfWeek,
     String? timeOfDay,
+    Duration? differenceTime,
   }) {
     return mergeRequestSignals(
       signals: const <String, Object?>{},
@@ -226,6 +237,7 @@ final class RahaAdsenseRuntime {
       language: language,
       dayOfWeek: dayOfWeek,
       timeOfDay: timeOfDay,
+      differenceTime: differenceTime,
     );
   }
 

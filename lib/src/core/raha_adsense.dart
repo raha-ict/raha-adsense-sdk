@@ -52,7 +52,8 @@ abstract final class RahaAdsense {
   /// Request a single ad response for the selected ad [type].
   ///
   /// For banner requests, provide [bannerSize]. For other ad formats,
-  /// [bannerSize] must be omitted.
+  /// [bannerSize] must be omitted. Pass [differenceTime] to adjust generated
+  /// day and time request signals for this request.
   static Future<RahaAdResponse?> adRequest({
     required RahaAdFormat type,
     RahaBannerSize? bannerSize,
@@ -60,6 +61,7 @@ abstract final class RahaAdsense {
     String? language,
     String? dayOfWeek,
     String? timeOfDay,
+    Duration? differenceTime,
   }) {
     final value = runtime;
     return switch (type) {
@@ -73,6 +75,7 @@ abstract final class RahaAdsense {
               language: language,
               dayOfWeek: dayOfWeek,
               timeOfDay: timeOfDay,
+              differenceTime: differenceTime,
             ),
       RahaAdFormat.video => bannerSize != null
           ? throw const RahaAdsException.invalidRequest(
@@ -83,6 +86,7 @@ abstract final class RahaAdsense {
               language: language,
               dayOfWeek: dayOfWeek,
               timeOfDay: timeOfDay,
+              differenceTime: differenceTime,
             ),
       RahaAdFormat.interstitial => bannerSize != null
           ? throw const RahaAdsException.invalidRequest(
@@ -93,6 +97,7 @@ abstract final class RahaAdsense {
               language: language,
               dayOfWeek: dayOfWeek,
               timeOfDay: timeOfDay,
+              differenceTime: differenceTime,
             ),
       RahaAdFormat.native => bannerSize != null
           ? throw const RahaAdsException.invalidRequest(
@@ -103,6 +108,7 @@ abstract final class RahaAdsense {
               language: language,
               dayOfWeek: dayOfWeek,
               timeOfDay: timeOfDay,
+              differenceTime: differenceTime,
             ),
     };
   }
@@ -110,12 +116,15 @@ abstract final class RahaAdsense {
   /// Request a single ad response for an exact Raha [placementId].
   ///
   /// The placement must belong to the app inventory loaded during [setup].
+  /// Pass [differenceTime] to adjust generated day and time request signals
+  /// for this request.
   static Future<RahaAdResponse?> requestByPlacementId({
     required String placementId,
     Map<String, Object?> signals = const <String, Object?>{},
     String? language,
     String? dayOfWeek,
     String? timeOfDay,
+    Duration? differenceTime,
   }) {
     return runtime.requestAdByPlacementId(
       placementId: placementId,
@@ -123,6 +132,7 @@ abstract final class RahaAdsense {
       language: language,
       dayOfWeek: dayOfWeek,
       timeOfDay: timeOfDay,
+      differenceTime: differenceTime,
     );
   }
 
