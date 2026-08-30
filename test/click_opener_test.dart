@@ -8,9 +8,12 @@ void main() {
   test('production config uses production endpoints by default', () {
     final config = RahaAdsenseConfig.production(
       appId: '743e8c4b-08e0-4152-877e-e035f7d92d9a',
+      deviceType: 'phone',
+      os: 'android',
     );
 
-    expect(config.endpoints.apiOrigin, Uri.parse('https://api.adsense.raha.af'));
+    expect(
+        config.endpoints.apiOrigin, Uri.parse('https://api.adsense.raha.af'));
     expect(
       config.endpoints.cdnBaseUrl,
       Uri.parse('https://cdn.raha.af/adsense/'),
@@ -20,10 +23,13 @@ void main() {
   test('production config accepts explicit production environment', () {
     final config = RahaAdsenseConfig.production(
       appId: '743e8c4b-08e0-4152-877e-e035f7d92d9a',
+      deviceType: 'phone',
+      os: 'android',
       environment: RahaAdsenseEnvironment.production,
     );
 
-    expect(config.endpoints.apiOrigin, Uri.parse('https://api.adsense.raha.af'));
+    expect(
+        config.endpoints.apiOrigin, Uri.parse('https://api.adsense.raha.af'));
     expect(
       config.endpoints.cdnBaseUrl,
       Uri.parse('https://cdn.raha.af/adsense/'),
@@ -33,6 +39,8 @@ void main() {
   test('production config accepts development environment', () {
     final config = RahaAdsenseConfig.production(
       appId: '743e8c4b-08e0-4152-877e-e035f7d92d9a',
+      deviceType: 'phone',
+      os: 'android',
       environment: RahaAdsenseEnvironment.development,
     );
 

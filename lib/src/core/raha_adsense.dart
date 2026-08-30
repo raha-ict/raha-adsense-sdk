@@ -23,6 +23,8 @@ abstract final class RahaAdsense {
   /// navigation in a custom shell.
   static Future<void> setup({
     required String appId,
+    required String deviceType,
+    required String os,
     RahaClickOpener? clickOpener,
     RahaAdsenseEnvironment environment = RahaAdsenseEnvironment.production,
   }) async {
@@ -32,6 +34,8 @@ abstract final class RahaAdsense {
     final runtime = RahaAdsenseRuntime(
       config: RahaAdsenseConfig.production(
         appId: appId,
+        deviceType: deviceType,
+        os: os,
         clickOpener: clickOpener,
         environment: environment,
       ),
@@ -53,6 +57,9 @@ abstract final class RahaAdsense {
     required RahaAdFormat type,
     RahaBannerSize? bannerSize,
     Map<String, Object?> signals = const <String, Object?>{},
+    String? language,
+    String? dayOfWeek,
+    String? timeOfDay,
   }) {
     final value = runtime;
     return switch (type) {
@@ -60,22 +67,43 @@ abstract final class RahaAdsense {
           ? throw const RahaAdsException.invalidRequest(
               'bannerSize is required for a banner ad request.',
             )
-          : value.requestBannerAd(size: bannerSize, signals: signals),
+          : value.requestBannerAd(
+              size: bannerSize,
+              signals: signals,
+              language: language,
+              dayOfWeek: dayOfWeek,
+              timeOfDay: timeOfDay,
+            ),
       RahaAdFormat.video => bannerSize != null
           ? throw const RahaAdsException.invalidRequest(
               'bannerSize must be omitted for a video ad request.',
             )
-          : value.requestVideoAd(signals: signals),
+          : value.requestVideoAd(
+              signals: signals,
+              language: language,
+              dayOfWeek: dayOfWeek,
+              timeOfDay: timeOfDay,
+            ),
       RahaAdFormat.interstitial => bannerSize != null
           ? throw const RahaAdsException.invalidRequest(
               'bannerSize must be omitted for an interstitial ad request.',
             )
-          : value.requestInterstitialAd(signals: signals),
+          : value.requestInterstitialAd(
+              signals: signals,
+              language: language,
+              dayOfWeek: dayOfWeek,
+              timeOfDay: timeOfDay,
+            ),
       RahaAdFormat.native => bannerSize != null
           ? throw const RahaAdsException.invalidRequest(
               'bannerSize must be omitted for a native ad request.',
             )
-          : value.requestNativeAd(signals: signals),
+          : value.requestNativeAd(
+              signals: signals,
+              language: language,
+              dayOfWeek: dayOfWeek,
+              timeOfDay: timeOfDay,
+            ),
     };
   }
 
@@ -85,10 +113,16 @@ abstract final class RahaAdsense {
   static Future<RahaAdResponse?> requestByPlacementId({
     required String placementId,
     Map<String, Object?> signals = const <String, Object?>{},
+    String? language,
+    String? dayOfWeek,
+    String? timeOfDay,
   }) {
     return runtime.requestAdByPlacementId(
       placementId: placementId,
       signals: signals,
+      language: language,
+      dayOfWeek: dayOfWeek,
+      timeOfDay: timeOfDay,
     );
   }
 

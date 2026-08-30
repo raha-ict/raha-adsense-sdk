@@ -143,6 +143,8 @@ Future<RahaAdsenseRuntime> _runtime(_TestAdServer server) async {
         cdnBaseUrl: server.origin.resolve('/cdn/'),
         allowInsecureHttp: true,
       ),
+      deviceType: 'phone',
+      os: 'android',
     ),
   );
   await runtime.initialize();

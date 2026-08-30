@@ -12,6 +12,8 @@ void main() {
       RahaAdsenseConfig.forTesting(
         appId: '743e8c4b-08e0-4152-877e-e035f7d92d9a',
         endpoints: RahaAdsenseEndpoints.production,
+        deviceType: 'phone',
+        os: 'android',
         enableDebugLogs: true,
       ),
     );
@@ -24,6 +26,8 @@ void main() {
       RahaAdsenseConfig.forTesting(
         appId: '743e8c4b-08e0-4152-877e-e035f7d92d9a',
         endpoints: RahaAdsenseEndpoints.production,
+        deviceType: 'phone',
+        os: 'android',
       ),
     );
 
@@ -46,6 +50,37 @@ void main() {
       'live': true,
       'tags': ['fa', null],
     });
+  });
+
+  test('merges default device and request signal metadata', () {
+    final result = mergeRequestSignals(
+      signals: const {'screen': 'home'},
+      deviceType: 'phone',
+      os: 'android',
+      language: 'ps',
+      dayOfWeek: 'Saturday',
+      timeOfDay: '23:40',
+    );
+
+    expect(result, {
+      'device_type': 'phone',
+      'os': 'android',
+      'language': 'ps',
+      'day_of_week': 'Saturday',
+      'time_of_day': '23:40',
+      'screen': 'home',
+    });
+  });
+
+  test('allows passing device metadata through setup config', () {
+    final config = RahaAdsenseConfig.production(
+      appId: '743e8c4b-08e0-4152-877e-e035f7d92d9a',
+      deviceType: 'tablet',
+      os: 'ios',
+    );
+
+    expect(config.deviceType, 'tablet');
+    expect(config.os, 'ios');
   });
 
   test('rejects duplicate normalized signal keys', () {

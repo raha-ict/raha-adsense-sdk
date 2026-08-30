@@ -9,6 +9,8 @@ enum RahaAdsenseEnvironment { production, development }
 final class RahaAdsenseConfig {
   RahaAdsenseConfig.production({
     required this.appId,
+    required this.deviceType,
+    required this.os,
     this.clickOpener,
     RahaAdsenseEnvironment environment = RahaAdsenseEnvironment.production,
   })  : endpoints = switch (environment) {
@@ -24,6 +26,8 @@ final class RahaAdsenseConfig {
   const RahaAdsenseConfig.forTesting({
     required this.appId,
     required this.endpoints,
+    this.deviceType = 'unknown',
+    this.os = 'unknown',
     this.clickOpener,
     this.enableDebugLogs = false,
     this.requestTimeout = const Duration(seconds: 9),
@@ -31,6 +35,8 @@ final class RahaAdsenseConfig {
   });
 
   final String appId;
+  final String deviceType;
+  final String os;
   final RahaClickOpener? clickOpener;
   final RahaAdsenseEndpoints endpoints;
   final bool enableDebugLogs;

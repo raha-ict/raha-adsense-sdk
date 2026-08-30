@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:intl/intl.dart';
 import 'package:pretty_dio_logger/pretty_dio_logger.dart';
 
 import '../config/raha_adsense_config.dart';
@@ -325,6 +327,32 @@ Uri? _tryParseAbsoluteHttpsUri(String raw) {
   } on FormatException {
     return null;
   }
+}
+
+Map<String, Object?> mergeRequestSignals({
+  required Map<String, Object?> signals,
+  required String deviceType,
+  required String os,
+  String? language,
+  String? dayOfWeek,
+  String? timeOfDay,
+}) {
+  final locale = WidgetsBinding.instance.platformDispatcher.locale;
+  final now = DateTime.now();
+  final effectiveLanguage =
+      language ?? (locale.languageCode.isNotEmpty ? locale.languageCode : 'en');
+  final effectiveDayOfWeek = dayOfWeek ?? DateFormat('EEEE').format(now);
+  final effectiveTimeOfDay = timeOfDay ?? DateFormat('HH:mm').format(now);
+
+  final defaults = <String, Object?>{
+    'device_type': deviceType,
+    'os': os,
+    'language': effectiveLanguage,
+    'day_of_week': effectiveDayOfWeek,
+    'time_of_day': effectiveTimeOfDay,
+  };
+
+  return <String, Object?>{...defaults, ...signals};
 }
 
 Map<String, Object?> validateAndNormalizePublisherSignals(

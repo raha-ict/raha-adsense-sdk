@@ -1,4 +1,6 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/widgets.dart';
+import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
@@ -44,13 +46,23 @@ final class RahaAdsenseRuntime {
   Future<RahaBannerAdResponse?> requestBannerAd({
     required RahaBannerSize size,
     required Map<String, Object?> signals,
+    String? language,
+    String? dayOfWeek,
+    String? timeOfDay,
     CancelToken? cancelToken,
   }) async {
     final registry = await _getRegistry(cancelToken: cancelToken);
     final placement = registry.resolveBanner(size);
     final decision = await _requestDecision(
       placement: placement,
-      signals: signals,
+      signals: mergeRequestSignals(
+        signals: signals,
+        deviceType: config.deviceType,
+        os: config.os,
+        language: language,
+        dayOfWeek: dayOfWeek,
+        timeOfDay: timeOfDay,
+      ),
       cancelToken: cancelToken,
     );
     final ad = _buildAdResponse(placement, decision);
@@ -66,13 +78,23 @@ final class RahaAdsenseRuntime {
 
   Future<RahaVideoAdResponse?> requestVideoAd({
     required Map<String, Object?> signals,
+    String? language,
+    String? dayOfWeek,
+    String? timeOfDay,
     CancelToken? cancelToken,
   }) async {
     final registry = await _getRegistry(cancelToken: cancelToken);
     final placement = registry.resolveVideo();
     final decision = await _requestDecision(
       placement: placement,
-      signals: signals,
+      signals: mergeRequestSignals(
+        signals: signals,
+        deviceType: config.deviceType,
+        os: config.os,
+        language: language,
+        dayOfWeek: dayOfWeek,
+        timeOfDay: timeOfDay,
+      ),
       cancelToken: cancelToken,
     );
     final ad = _buildAdResponse(placement, decision);
@@ -88,13 +110,23 @@ final class RahaAdsenseRuntime {
 
   Future<RahaInterstitialAdResponse?> requestInterstitialAd({
     required Map<String, Object?> signals,
+    String? language,
+    String? dayOfWeek,
+    String? timeOfDay,
     CancelToken? cancelToken,
   }) async {
     final registry = await _getRegistry(cancelToken: cancelToken);
     final placement = registry.resolveInterstitial();
     final decision = await _requestDecision(
       placement: placement,
-      signals: signals,
+      signals: mergeRequestSignals(
+        signals: signals,
+        deviceType: config.deviceType,
+        os: config.os,
+        language: language,
+        dayOfWeek: dayOfWeek,
+        timeOfDay: timeOfDay,
+      ),
       cancelToken: cancelToken,
     );
     final ad = _buildAdResponse(placement, decision);
@@ -110,13 +142,23 @@ final class RahaAdsenseRuntime {
 
   Future<RahaNativeAdResponse?> requestNativeAd({
     required Map<String, Object?> signals,
+    String? language,
+    String? dayOfWeek,
+    String? timeOfDay,
     CancelToken? cancelToken,
   }) async {
     final registry = await _getRegistry(cancelToken: cancelToken);
     final placement = registry.resolveNative();
     final decision = await _requestDecision(
       placement: placement,
-      signals: signals,
+      signals: mergeRequestSignals(
+        signals: signals,
+        deviceType: config.deviceType,
+        os: config.os,
+        language: language,
+        dayOfWeek: dayOfWeek,
+        timeOfDay: timeOfDay,
+      ),
       cancelToken: cancelToken,
     );
     final ad = _buildAdResponse(placement, decision);
@@ -133,13 +175,23 @@ final class RahaAdsenseRuntime {
   Future<RahaAdResponse?> requestAdByPlacementId({
     required String placementId,
     required Map<String, Object?> signals,
+    String? language,
+    String? dayOfWeek,
+    String? timeOfDay,
     CancelToken? cancelToken,
   }) async {
     final registry = await _getRegistry(cancelToken: cancelToken);
     final placement = registry.resolveById(placementId);
     final decision = await _requestDecision(
       placement: placement,
-      signals: signals,
+      signals: mergeRequestSignals(
+        signals: signals,
+        deviceType: config.deviceType,
+        os: config.os,
+        language: language,
+        dayOfWeek: dayOfWeek,
+        timeOfDay: timeOfDay,
+      ),
       cancelToken: cancelToken,
     );
     return _buildAdResponse(placement, decision);
@@ -160,6 +212,29 @@ final class RahaAdsenseRuntime {
       signals: signals,
       cancelToken: cancelToken,
     );
+  }
+
+  Map<String, Object?> defaultSignalsForRequest({
+    required String deviceType,
+    required String os,
+    String? language,
+    String? dayOfWeek,
+    String? timeOfDay,
+  }) {
+    final locale = WidgetsBinding.instance.platformDispatcher.locale;
+    final now = DateTime.now();
+    final effectiveLanguage = language ??
+        (locale.languageCode.isNotEmpty ? locale.languageCode : 'en');
+    final effectiveDayOfWeek = dayOfWeek ?? DateFormat('EEEE').format(now);
+    final effectiveTimeOfDay = timeOfDay ?? DateFormat('HH:mm').format(now);
+
+    return <String, Object?>{
+      'device_type': deviceType,
+      'os': os,
+      'language': effectiveLanguage,
+      'day_of_week': effectiveDayOfWeek,
+      'time_of_day': effectiveTimeOfDay,
+    };
   }
 
   /// Return the cached placement registry, refreshing it when needed.

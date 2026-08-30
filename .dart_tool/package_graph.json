@@ -9,6 +9,7 @@
       "dependencies": [
         "dio",
         "flutter",
+        "intl",
         "pretty_dio_logger",
         "url_launcher",
         "uuid",
@@ -91,6 +92,15 @@
       "version": "1.4.0",
       "dependencies": [
         "dio"
+      ]
+    },
+    {
+      "name": "intl",
+      "version": "0.20.3",
+      "dependencies": [
+        "clock",
+        "meta",
+        "path"
       ]
     },
     {
