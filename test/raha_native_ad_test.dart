@@ -29,4 +29,26 @@ void main() {
 
     expect(errors, 2);
   });
+
+  testWidgets('reloads when language changes', (tester) async {
+    var errors = 0;
+
+    await tester.pumpWidget(
+      RahaNativeAd(
+        language: 'fa',
+        onError: (_) => errors++,
+      ),
+    );
+    await tester.pump();
+
+    await tester.pumpWidget(
+      RahaNativeAd(
+        language: 'ps',
+        onError: (_) => errors++,
+      ),
+    );
+    await tester.pump();
+
+    expect(errors, 2);
+  });
 }

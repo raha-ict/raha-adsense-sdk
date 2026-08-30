@@ -19,6 +19,7 @@ class RahaVideoAd extends StatefulWidget {
   const RahaVideoAd({
     super.key,
     this.signals = const <String, Object?>{},
+    this.language,
     this.differenceTime,
     this.onLoaded,
     this.onImpression,
@@ -29,6 +30,9 @@ class RahaVideoAd extends StatefulWidget {
 
   /// Optional contextual signals sent with the video ad request.
   final Map<String, Object?> signals;
+
+  /// Optional content language for generated request signals.
+  final String? language;
 
   /// Optional time offset for generated day and time request signals.
   final Duration? differenceTime;
@@ -75,6 +79,7 @@ class _RahaVideoAdState extends State<RahaVideoAd> with WidgetsBindingObserver {
   void didUpdateWidget(covariant RahaVideoAd oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.signals != widget.signals ||
+        oldWidget.language != widget.language ||
         oldWidget.differenceTime != widget.differenceTime) {
       _reset();
       _load();
@@ -113,6 +118,7 @@ class _RahaVideoAdState extends State<RahaVideoAd> with WidgetsBindingObserver {
     try {
       final ad = await RahaAdsense.runtime.requestVideoAd(
         signals: widget.signals,
+        language: widget.language,
         differenceTime: widget.differenceTime,
         cancelToken: _cancelToken,
       );

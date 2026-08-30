@@ -20,6 +20,7 @@ class RahaBannerAd extends StatefulWidget {
     required this.size,
     super.key,
     this.signals = const <String, Object?>{},
+    this.language,
     this.differenceTime,
     this.onLoaded,
     this.onImpression,
@@ -32,6 +33,9 @@ class RahaBannerAd extends StatefulWidget {
 
   /// Optional contextual signals that are sent with the ad request.
   final Map<String, Object?> signals;
+
+  /// Optional content language for generated request signals.
+  final String? language;
 
   /// Optional time offset for generated day and time request signals.
   final Duration? differenceTime;
@@ -76,6 +80,7 @@ class _RahaBannerAdState extends State<RahaBannerAd>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.size != widget.size ||
         oldWidget.signals != widget.signals ||
+        oldWidget.language != widget.language ||
         oldWidget.differenceTime != widget.differenceTime) {
       _cancelToken.cancel();
       _impressionTimer?.cancel();
@@ -107,6 +112,7 @@ class _RahaBannerAdState extends State<RahaBannerAd>
       final ad = await RahaAdsense.runtime.requestBannerAd(
         size: widget.size,
         signals: widget.signals,
+        language: widget.language,
         differenceTime: widget.differenceTime,
         cancelToken: _cancelToken,
       );

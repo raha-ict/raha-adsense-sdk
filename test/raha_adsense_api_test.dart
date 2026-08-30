@@ -99,6 +99,8 @@ void main() {
 
   test('normalizes known language signal values', () {
     expect(normalizeLanguageSignal('fa'), 'farsi');
+    expect(normalizeLanguageSignal('farsi'), 'farsi');
+    expect(normalizeLanguageSignal('persian'), 'farsi');
     expect(normalizeLanguageSignal('ps'), 'pashto');
     expect(normalizeLanguageSignal('en'), 'english');
     expect(normalizeLanguageSignal('zh'), 'chinese');
@@ -106,6 +108,21 @@ void main() {
     expect(normalizeLanguageSignal(' EN_us '), 'english');
     expect(normalizeLanguageSignal('Dari'), 'dari');
     expect(normalizeLanguageSignal('uz'), 'uzbek');
+  });
+
+  test('emits farsi for farsi and persian request language values', () {
+    for (final language in const ['fa', 'farsi', 'persian']) {
+      final result = mergeRequestSignals(
+        signals: const {},
+        deviceType: 'phone',
+        os: 'android',
+        language: language,
+        dayOfWeek: 'Saturday',
+        timeOfDay: 'night',
+      );
+
+      expect(result['language'], 'FARSI');
+    }
   });
 
   test('returns unknown for unsupported language signal values', () {

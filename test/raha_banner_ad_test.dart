@@ -64,4 +64,42 @@ void main() {
 
     expect(errors, 2);
   });
+
+  testWidgets('reloads when language changes', (tester) async {
+    var errors = 0;
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: SizedBox(
+          width: 320,
+          height: 50,
+          child: RahaBannerAd(
+            size: RahaBannerSize.mobile320x50,
+            language: 'fa',
+            onError: (_) => errors++,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: SizedBox(
+          width: 320,
+          height: 50,
+          child: RahaBannerAd(
+            size: RahaBannerSize.mobile320x50,
+            language: 'ps',
+            onError: (_) => errors++,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(errors, 2);
+  });
 }

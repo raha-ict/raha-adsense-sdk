@@ -45,4 +45,26 @@ void main() {
 
     expect(errors, 2);
   });
+
+  testWidgets('video reloads when language changes', (tester) async {
+    var errors = 0;
+
+    await tester.pumpWidget(
+      RahaVideoAd(
+        language: 'fa',
+        onError: (_) => errors++,
+      ),
+    );
+    await tester.pump();
+
+    await tester.pumpWidget(
+      RahaVideoAd(
+        language: 'ps',
+        onError: (_) => errors++,
+      ),
+    );
+    await tester.pump();
+
+    expect(errors, 2);
+  });
 }
