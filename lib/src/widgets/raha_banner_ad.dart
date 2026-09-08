@@ -22,6 +22,7 @@ class RahaBannerAd extends StatefulWidget {
     this.signals = const <String, Object?>{},
     this.language,
     this.differenceTime,
+    this.fit = BoxFit.none,
     this.onLoaded,
     this.onImpression,
     this.onClick,
@@ -39,6 +40,11 @@ class RahaBannerAd extends StatefulWidget {
 
   /// Optional time offset for generated day and time request signals.
   final Duration? differenceTime;
+
+  /// How the fixed-size banner creative should fit inside parent constraints.
+  ///
+  /// Defaults to [BoxFit.none], which preserves exact-size rendering.
+  final BoxFit fit;
 
   /// Called when the banner ad is successfully loaded.
   final ValueChanged<RahaAdInfo>? onLoaded;
@@ -72,7 +78,9 @@ class _RahaBannerAdState extends State<RahaBannerAd>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _cancelToken = CancelToken();
-    _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _load();
+    });
   }
 
   @override
@@ -134,7 +142,8 @@ class _RahaBannerAdState extends State<RahaBannerAd>
     if (_noFill) return const SizedBox.shrink();
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (!canRenderExactBanner(constraints, widget.size)) {
+        if (widget.fit == BoxFit.none &&
+            !canRenderExactBanner(constraints, widget.size)) {
           widget.onError?.call(
             RahaAdsException(
               RahaAdsErrorCode.layout,
@@ -147,9 +156,10 @@ class _RahaBannerAdState extends State<RahaBannerAd>
 
         final ad = _ad;
         if (ad == null) {
-          return SizedBox(
+          return _buildBannerFrame(
             width: widget.size.width.toDouble(),
             height: widget.size.height.toDouble(),
+            child: const SizedBox.expand(),
           );
         }
 
@@ -170,7 +180,7 @@ class _RahaBannerAdState extends State<RahaBannerAd>
   }
 
   Widget _buildFilledBanner(RahaBannerAdResponse ad) {
-    return SizedBox(
+    return _buildBannerFrame(
       width: ad.width.toDouble(),
       height: ad.height.toDouble(),
       child: ClipRect(
@@ -215,6 +225,23 @@ class _RahaBannerAdState extends State<RahaBannerAd>
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildBannerFrame({
+    required Widget child,
+    required double width,
+    required double height,
+  }) {
+    final content = SizedBox(width: width, height: height, child: child);
+
+    if (widget.fit == BoxFit.none) return content;
+
+    return SizedBox.expand(
+      child: FittedBox(
+        fit: widget.fit,
+        child: content,
       ),
     );
   }

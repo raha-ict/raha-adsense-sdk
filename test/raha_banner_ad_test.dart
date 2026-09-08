@@ -1,8 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:raha_adsense/raha_adsense.dart';
-import 'package:raha_adsense/src/models/models.dart';
-import 'package:raha_adsense/src/widgets/raha_banner_ad.dart';
 
 void main() {
   tearDown(RahaAdsense.resetForTesting);
@@ -27,36 +25,147 @@ void main() {
     );
   });
 
+  testWidgets('default behavior rejects too-small constraints', (tester) async {
+    final errors = <RahaAdsException>[];
+
+    await tester.pumpWidget(
+      _bannerHost(
+        width: 100,
+        height: 40,
+        child: RahaBannerAd(
+          size: RahaBannerSize.mobile320x50,
+          onError: errors.add,
+        ),
+      ),
+    );
+
+    expect(find.byType(FittedBox), findsNothing);
+    expect(find.byType(RahaBannerAd), findsOneWidget);
+    expect(find.byType(SizedBox), findsWidgets);
+    expect(
+      errors.where((error) => error.code == RahaAdsErrorCode.layout),
+      hasLength(1),
+    );
+  });
+
+  testWidgets('default behavior rejects stretched constraints', (tester) async {
+    final errors = <RahaAdsException>[];
+
+    await tester.pumpWidget(
+      _bannerHost(
+        width: 400,
+        height: 50,
+        child: RahaBannerAd(
+          size: RahaBannerSize.mobile320x50,
+          onError: errors.add,
+        ),
+      ),
+    );
+
+    expect(find.byType(FittedBox), findsNothing);
+    expect(
+      errors.where((error) => error.code == RahaAdsErrorCode.layout),
+      hasLength(1),
+    );
+  });
+
+  testWidgets('fit contain accepts smaller constraints', (tester) async {
+    final errors = <RahaAdsException>[];
+
+    await tester.pumpWidget(
+      _bannerHost(
+        width: 100,
+        height: 300,
+        child: RahaBannerAd(
+          size: RahaBannerSize.wideSkyscraper160x600,
+          fit: BoxFit.contain,
+          onError: errors.add,
+        ),
+      ),
+    );
+
+    expect(find.byType(FittedBox), findsOneWidget);
+    expect(find.byType(RahaBannerAd), findsOneWidget);
+    expect(
+      errors.where((error) => error.code == RahaAdsErrorCode.layout),
+      isEmpty,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('exact-compatible constraints pass without fit', (tester) async {
+    final errors = <RahaAdsException>[];
+
+    await tester.pumpWidget(
+      _bannerHost(
+        width: 320,
+        height: 50,
+        child: RahaBannerAd(
+          size: RahaBannerSize.mobile320x50,
+          onError: errors.add,
+        ),
+      ),
+    );
+
+    expect(find.byType(FittedBox), findsNothing);
+    expect(find.byType(RahaBannerAd), findsOneWidget);
+    expect(
+      errors.where((error) => error.code == RahaAdsErrorCode.layout),
+      isEmpty,
+    );
+  });
+
+  testWidgets(
+    'fit contain under smaller constraints renders a banner frame',
+    (tester) async {
+      await tester.pumpWidget(
+        _bannerHost(
+          width: 100,
+          height: 300,
+          child: const RahaBannerAd(
+            size: RahaBannerSize.wideSkyscraper160x600,
+            fit: BoxFit.contain,
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(FittedBox), findsOneWidget);
+      expect(find.byType(RahaBannerAd), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is SizedBox && widget.width == 160 && widget.height == 600,
+        ),
+        findsOneWidget,
+      );
+    },
+  );
+
   testWidgets('reloads when difference time changes', (tester) async {
     var errors = 0;
 
     await tester.pumpWidget(
-      Directionality(
-        textDirection: TextDirection.ltr,
-        child: SizedBox(
-          width: 320,
-          height: 50,
-          child: RahaBannerAd(
-            size: RahaBannerSize.mobile320x50,
-            differenceTime: Duration.zero,
-            onError: (_) => errors++,
-          ),
+      _bannerHost(
+        width: 320,
+        height: 50,
+        child: RahaBannerAd(
+          size: RahaBannerSize.mobile320x50,
+          differenceTime: Duration.zero,
+          onError: (_) => errors++,
         ),
       ),
     );
     await tester.pump();
 
     await tester.pumpWidget(
-      Directionality(
-        textDirection: TextDirection.ltr,
-        child: SizedBox(
-          width: 320,
-          height: 50,
-          child: RahaBannerAd(
-            size: RahaBannerSize.mobile320x50,
-            differenceTime: const Duration(hours: 1),
-            onError: (_) => errors++,
-          ),
+      _bannerHost(
+        width: 320,
+        height: 50,
+        child: RahaBannerAd(
+          size: RahaBannerSize.mobile320x50,
+          differenceTime: const Duration(hours: 1),
+          onError: (_) => errors++,
         ),
       ),
     );
@@ -69,32 +178,26 @@ void main() {
     var errors = 0;
 
     await tester.pumpWidget(
-      Directionality(
-        textDirection: TextDirection.ltr,
-        child: SizedBox(
-          width: 320,
-          height: 50,
-          child: RahaBannerAd(
-            size: RahaBannerSize.mobile320x50,
-            language: 'fa',
-            onError: (_) => errors++,
-          ),
+      _bannerHost(
+        width: 320,
+        height: 50,
+        child: RahaBannerAd(
+          size: RahaBannerSize.mobile320x50,
+          language: 'fa',
+          onError: (_) => errors++,
         ),
       ),
     );
     await tester.pump();
 
     await tester.pumpWidget(
-      Directionality(
-        textDirection: TextDirection.ltr,
-        child: SizedBox(
-          width: 320,
-          height: 50,
-          child: RahaBannerAd(
-            size: RahaBannerSize.mobile320x50,
-            language: 'ps',
-            onError: (_) => errors++,
-          ),
+      _bannerHost(
+        width: 320,
+        height: 50,
+        child: RahaBannerAd(
+          size: RahaBannerSize.mobile320x50,
+          language: 'ps',
+          onError: (_) => errors++,
         ),
       ),
     );
@@ -102,4 +205,21 @@ void main() {
 
     expect(errors, 2);
   });
+}
+
+Widget _bannerHost({
+  required double width,
+  required double height,
+  required Widget child,
+}) {
+  return Directionality(
+    textDirection: TextDirection.ltr,
+    child: Center(
+      child: SizedBox(
+        width: width,
+        height: height,
+        child: child,
+      ),
+    ),
+  );
 }

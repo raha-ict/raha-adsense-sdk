@@ -2,7 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:raha_adsense/raha_adsense.dart';
 import 'package:raha_adsense/src/config/raha_adsense_config.dart';
 import 'package:raha_adsense/src/config/raha_adsense_endpoints.dart';
-import 'package:raha_adsense/src/models/models.dart';
 
 void main() {
   test('production config uses production endpoints by default', () {
@@ -76,10 +75,11 @@ void main() {
   test('public click opener type receives destination and ad info', () async {
     Uri? capturedUrl;
     RahaAdInfo? capturedInfo;
-    final RahaClickOpener opener = (destinationUrl, info) {
+
+    Future<void> opener(Uri destinationUrl, RahaAdInfo info) async {
       capturedUrl = destinationUrl;
       capturedInfo = info;
-    };
+    }
 
     const info = RahaAdInfo(
       adId: 'ad_123',

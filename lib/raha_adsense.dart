@@ -4,7 +4,7 @@
 /// including banners, video, interstitials, and native placements.
 ///
 /// Use [RahaAdsense.setup] to initialize the SDK before requesting ads.
-library raha_adsense;
+library;
 
 export 'src/core/click_opener.dart' show RahaClickOpener;
 export 'src/core/raha_adsense.dart';
