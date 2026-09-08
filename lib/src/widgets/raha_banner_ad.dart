@@ -9,6 +9,7 @@ import '../core/viewability_policy.dart';
 import '../errors/raha_adsense_exception.dart';
 import '../models/ad_response.dart';
 import '../models/models.dart';
+import 'banner_creative.dart';
 
 /// A widget that displays a Raha banner ad.
 ///
@@ -187,26 +188,17 @@ class _RahaBannerAdState extends State<RahaBannerAd>
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Image.network(
-              ad.imageUrl.toString(),
+            RahaBannerCreative(
+              url: ad.imageUrl,
               width: ad.width.toDouble(),
               height: ad.height.toDouble(),
-              fit: BoxFit.fill,
-              filterQuality: FilterQuality.low,
-              frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-                if ((frame != null || wasSynchronouslyLoaded) &&
-                    !_imageDecoded) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (!mounted) return;
-                    _imageDecoded = true;
-                    _evaluateViewability();
-                  });
-                }
-                return child;
+              onRendered: () {
+                if (!mounted || _imageDecoded) return;
+                _imageDecoded = true;
+                _evaluateViewability();
               },
-              errorBuilder: (context, error, stackTrace) {
+              onError: (error) {
                 widget.onError?.call(_asRahaError(error));
-                return const SizedBox.shrink();
               },
             ),
             const PositionedDirectional(

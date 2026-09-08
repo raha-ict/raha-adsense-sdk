@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:raha_adsense/raha_adsense.dart';
+import 'package:raha_adsense/src/widgets/banner_creative_types.dart';
 
 void main() {
   tearDown(RahaAdsense.resetForTesting);
@@ -21,6 +22,25 @@ void main() {
         const BoxConstraints.tightFor(width: 400, height: 50),
         RahaBannerSize.mobile320x50,
       ),
+      isFalse,
+    );
+  });
+
+  test('detects svg banner creatives by URL path only', () {
+    expect(isSvgBannerCreative(Uri.parse('https://cdn.example.com/ad.svg')),
+        isTrue);
+    expect(
+      isSvgBannerCreative(
+        Uri.parse('https://cdn.example.com/ad.SVG?cacheBust=1'),
+      ),
+      isTrue,
+    );
+    expect(isSvgBannerCreative(Uri.parse('https://cdn.example.com/ad.gif')),
+        isFalse);
+    expect(isSvgBannerCreative(Uri.parse('https://cdn.example.com/ad.png')),
+        isFalse);
+    expect(
+      isSvgBannerCreative(Uri.parse('https://cdn.example.com/ad')),
       isFalse,
     );
   });

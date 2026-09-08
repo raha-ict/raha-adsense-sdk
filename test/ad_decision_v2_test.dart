@@ -75,10 +75,7 @@ void main() {
 
       final decision = RahaAdDecisionDto.fromJson(json);
 
-      expect(
-        decision.clickTrackingUrl,
-        value is String ? value.trim() : null,
-      );
+      expect(decision.clickTrackingUrl, isNull);
     }
   });
 }
