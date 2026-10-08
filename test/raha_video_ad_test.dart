@@ -28,7 +28,7 @@ void main() {
     expect(RahaAdsense.requestByPlacementId, isA<Function>());
   });
 
-  testWidgets('video coalesces difference-time change until refresh interval',
+  testWidgets('video does not request before SDK setup on input change',
       (tester) async {
     var errors = 0;
 
@@ -48,10 +48,10 @@ void main() {
     );
     await tester.pump();
 
-    expect(errors, 1);
+    expect(errors, 0);
   });
 
-  testWidgets('video coalesces language change until refresh interval',
+  testWidgets('video does not request before SDK setup on language change',
       (tester) async {
     var errors = 0;
 
@@ -71,6 +71,6 @@ void main() {
     );
     await tester.pump();
 
-    expect(errors, 1);
+    expect(errors, 0);
   });
 }

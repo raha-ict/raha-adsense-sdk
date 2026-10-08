@@ -93,6 +93,7 @@ void main() {
     scrollController.jumpTo(600);
     await tester.pump();
     await _pumpUntil(tester, () => backend.adRequests.length == 1);
+    await tester.pump();
     expect(backend.adRequests, hasLength(1));
 
     await tester.pumpWidget(_scrollHost(scrollController, banner));
@@ -100,6 +101,115 @@ void main() {
     await _pumpUntil(tester, () => backend.adRequests.length == 1);
     await tester.pumpWidget(const SizedBox.shrink());
     scrollController.dispose();
+  });
+
+  testWidgets('changed signals coalesce until the shared interval',
+      (tester) async {
+    backend.noFillPlacements.add('banner-placement');
+    await tester.pumpWidget(
+      _visibleHost(
+        const RahaBannerAd(
+          size: RahaBannerSize.mobile320x50,
+          signals: {'genre': 'first'},
+        ),
+      ),
+    );
+    await _pumpUntil(tester, () => backend.adRequests.length == 1);
+    await tester.pump();
+
+    await tester.pumpWidget(
+      _visibleHost(
+        const RahaBannerAd(
+          size: RahaBannerSize.mobile320x50,
+          signals: {'genre': 'latest'},
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(minutes: 29, seconds: 59));
+    expect(backend.adRequests, hasLength(1));
+
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    await _pumpUntil(tester, () => backend.adRequests.length == 2);
+    expect(backend.adRequests.last.body['genre'], 'latest');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('automatic cooldown survives widget remounts', (tester) async {
+    backend.noFillPlacements.add('banner-placement');
+    await tester.pumpWidget(
+      _visibleHost(
+        const RahaBannerAd(
+          key: ValueKey('first-state'),
+          size: RahaBannerSize.mobile320x50,
+        ),
+      ),
+    );
+    await _pumpUntil(tester, () => backend.adRequests.length == 1);
+    await tester.pump();
+
+    await tester.pumpWidget(
+      _visibleHost(
+        const RahaBannerAd(
+          key: ValueKey('remounted-state'),
+          size: RahaBannerSize.mobile320x50,
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(backend.adRequests, hasLength(1));
+
+    await tester.pump(const Duration(minutes: 30));
+    await tester.pump();
+    await _pumpUntil(tester, () => backend.adRequests.length == 2);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('only one visible same-placement widget requests per interval',
+      (tester) async {
+    backend.noFillPlacements.add('banner-placement');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Column(
+          children: [
+            const RahaBannerAd(size: RahaBannerSize.mobile320x50),
+            const RahaBannerAd(size: RahaBannerSize.mobile320x50),
+          ],
+        ),
+      ),
+    );
+    await _pumpUntil(tester, () => backend.adRequests.length == 1);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(backend.adRequests, hasLength(1));
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('disposing an automatic widget cancels its refresh timer',
+      (tester) async {
+    backend.noFillPlacements.add('banner-placement');
+    await tester.pumpWidget(
+      _visibleHost(
+        const RahaBannerAd(size: RahaBannerSize.mobile320x50),
+      ),
+    );
+    await _pumpUntil(tester, () => backend.adRequests.length == 1);
+    await tester.pump();
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(minutes: 31));
+    expect(backend.adRequests, hasLength(1));
+  });
+
+  testWidgets('disposing video widget detaches its controller listener',
+      (tester) async {
+    await tester.pumpWidget(_visibleHost(const RahaVideoAd()));
+    await _pumpUntil(tester, () => backend.impressionRequests.isNotEmpty);
+    await _pumpUntil(tester, () => videoPlayer.activeEventListeners == 1);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _pumpUntil(tester, () => videoPlayer.activeEventListeners == 0);
+    expect(backend.adRequests, hasLength(1));
   });
 
   testWidgets('no-fill waits for the configured refresh interval',
@@ -115,11 +225,39 @@ void main() {
     scrollController.jumpTo(600);
     await tester.pump();
     await _pumpUntil(tester, () => backend.adRequests.length == 1);
+    await tester.pump();
     expect(backend.adRequests, hasLength(1));
 
     await tester.pump(const Duration(minutes: 29, seconds: 59));
     expect(backend.adRequests, hasLength(1));
     await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    await _pumpUntil(tester, () => backend.adRequests.length == 2);
+    await tester.pumpWidget(const SizedBox.shrink());
+    scrollController.dispose();
+  });
+
+  testWidgets('refresh waits until interval and while placement is visible',
+      (tester) async {
+    backend.noFillPlacements.add('banner-placement');
+    final scrollController = ScrollController();
+    await tester.pumpWidget(
+      _scrollHost(
+        scrollController,
+        const RahaBannerAd(size: RahaBannerSize.mobile320x50),
+      ),
+    );
+    scrollController.jumpTo(600);
+    await tester.pump();
+    await _pumpUntil(tester, () => backend.adRequests.length == 1);
+    await tester.pump();
+
+    scrollController.jumpTo(0);
+    await tester.pump();
+    await tester.pump(const Duration(minutes: 30));
+    expect(backend.adRequests, hasLength(1));
+
+    scrollController.jumpTo(600);
     await tester.pump();
     await _pumpUntil(tester, () => backend.adRequests.length == 2);
     await tester.pumpWidget(const SizedBox.shrink());
@@ -366,6 +504,10 @@ Map<String, Object?> _decision(String placementId) => switch (placementId) {
 final class _FakeVideoPlayer extends VideoPlayerPlatform {
   int _nextId = 0;
   final _streams = <int, StreamController<VideoEvent>>{};
+
+  int get activePlayers => _streams.length;
+  int get activeEventListeners =>
+      _streams.values.where((stream) => stream.hasListener).length;
 
   void emitBuffering(bool buffering) {
     for (final stream in _streams.values) {

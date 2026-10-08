@@ -2,9 +2,11 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+
+import '../core/raha_ads_debug_log.dart';
+import '../core/ad_request_log_context.dart';
 import 'package:flutter/widgets.dart';
 import 'package:intl/intl.dart';
-import 'package:pretty_dio_logger/pretty_dio_logger.dart';
 
 import '../config/raha_adsense_config.dart';
 import '../errors/raha_adsense_exception.dart';
@@ -27,18 +29,6 @@ Dio buildRahaDio(RahaAdsenseConfig config) {
       headers: const {'Accept': 'application/json'},
     ),
   );
-
-  if (config.enableDebugLogs) {
-    dio.interceptors.add(
-      PrettyDioLogger(
-        requestHeader: true,
-        responseHeader: true,
-        error: true,
-        compact: true,
-        enabled: config.enableDebugLogs,
-      ),
-    );
-  }
 
   return dio;
 }
@@ -81,8 +71,10 @@ final class RahaAdsenseApi {
     required String placementId,
     required Map<String, Object?> signals,
     required String visitorId,
+    required String visitorIdLogFingerprint,
     required Map<String, Object?> userAgent,
     required String format,
+    required RahaAdRequestLogContext requestContext,
     bool debugLogs = false,
     CancelToken? cancelToken,
   }) async {
@@ -100,9 +92,16 @@ final class RahaAdsenseApi {
     }
 
     if (debugLogs) {
-      debugPrint(
-        '[RAHA_ADS] request_body placementId=$placementId format=$format '
-        '$encoded',
+      rahaAdsDebugLog(
+        'event=request_body ${requestContext.fields(
+          placementId: placementId,
+          format: format,
+          visitorIdHash: visitorIdLogFingerprint,
+        )} bodyKeys=${<String>{
+          'visitorId',
+          'userAgent',
+          ...normalizedSignals.keys
+        }.join(',')}',
       );
     }
 
@@ -592,8 +591,8 @@ String _describeDioError(DioException error) {
 void _logMalformedTracking(Response<dynamic> response, String expectedType) {
   if (!kDebugMode) return;
   final contentType = response.headers.value(Headers.contentTypeHeader);
-  debugPrint(
-    '[Raha Adsense] tracking $expectedType response malformed: '
+  rahaAdsDebugLog(
+    'tracking $expectedType response malformed: '
     'HTTP ${response.statusCode}, content-type ${contentType ?? 'unknown'}',
   );
 }

@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import '../core/raha_adsense.dart';
+import '../core/raha_ads_debug_log.dart';
+import '../core/ad_request_log_context.dart';
 import '../core/signal_equality.dart';
 import '../core/viewability_policy.dart';
 import '../errors/raha_adsense_exception.dart';
@@ -69,6 +71,7 @@ class _RahaBannerAdState extends State<RahaBannerAd>
     with WidgetsBindingObserver {
   late CancelToken _cancelToken;
   late VisibleAdRequestScheduler _requestScheduler;
+  RahaAdRequestLogContext? _activeRequestContext;
   RahaBannerAdResponse? _ad;
   bool _noFill = false;
   bool _imageDecoded = false;
@@ -76,18 +79,21 @@ class _RahaBannerAdState extends State<RahaBannerAd>
   double _visibleFraction = 0;
   Timer? _impressionTimer;
   bool _impressionRecorded = false;
+  late final String _widgetInstanceId;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _cancelToken = CancelToken();
+    _widgetInstanceId = nextRahaWidgetInstanceId();
+    _debugLog('event=widget_mount');
     _requestScheduler = VisibleAdRequestScheduler(
-      interval: _refreshInterval,
       load: _load,
+      tryAcquireRequestSlot: _tryAcquireRequestSlot,
       onLog: _debugLog,
-      placementId: () =>
-          _ad?.info.placementId ?? 'banner:${widget.size.wireValue}',
+      placementId: _placementId,
+      widgetInstanceId: _widgetInstanceId,
     );
   }
 
@@ -114,13 +120,15 @@ class _RahaBannerAdState extends State<RahaBannerAd>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _debugLog('event=widget_dispose placementId=${_placementId()}');
     _requestScheduler.dispose();
     _impressionTimer?.cancel();
     _cancelToken.cancel();
     super.dispose();
   }
 
-  Future<void> _load() async {
+  Future<void> _load(RahaAdRequestLogContext requestContext) async {
+    _activeRequestContext = requestContext;
     _cancelToken.cancel();
     _cancelToken = CancelToken();
     try {
@@ -130,6 +138,7 @@ class _RahaBannerAdState extends State<RahaBannerAd>
         language: widget.language,
         differenceTime: widget.differenceTime,
         cancelToken: _cancelToken,
+        requestContext: requestContext,
       );
       if (!mounted || _cancelToken.isCancelled) return;
       _impressionTimer?.cancel();
@@ -291,13 +300,27 @@ class _RahaBannerAdState extends State<RahaBannerAd>
     }
   }
 
-  Duration get _refreshInterval => RahaAdsense.isReady
-      ? RahaAdsense.runtime.config.adRefreshInterval
-      : const Duration(minutes: 30);
+  String _placementId() => RahaAdsense.isReady
+      ? RahaAdsense.runtime.automaticBannerPlacementId(widget.size)
+      : 'banner:${widget.size.wireValue}';
+
+  Duration? _tryAcquireRequestSlot() {
+    if (!RahaAdsense.isReady) return const Duration(minutes: 30);
+    return RahaAdsense.runtime.tryAcquireAutomaticRequest(_placementId());
+  }
 
   void _debugLog(String message) {
     if (RahaAdsense.isReady && RahaAdsense.runtime.config.enableDebugLogs) {
-      debugPrint('[RAHA_ADS] $message');
+      final requestContext = _activeRequestContext;
+      rahaAdsDebugLog(
+        '$message format=banner visitorIdHash='
+        '${RahaAdsense.runtime.visitorIdLogFingerprint} '
+        'widgetInstanceId=$_widgetInstanceId '
+        'requestId=${requestContext?.requestId ?? 'none'} '
+        'requestSource=${requestContext?.requestSource ?? 'widget_lifecycle'} '
+        'trigger=${requestContext?.trigger ?? 'state'} '
+        'visibleFraction=$_visibleFraction',
+      );
     }
   }
 

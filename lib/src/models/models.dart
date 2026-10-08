@@ -1,3 +1,5 @@
+import '../core/ad_request_log_context.dart';
+
 enum RahaInventoryPlacementFormat {
   banner,
   video,
@@ -294,6 +296,7 @@ final class RahaResolvedAd {
     required this.clickTrackingUri,
     required this.impressionEventId,
     required this.isClickable,
+    required this.requestContext,
   });
 
   final RahaAdInfo info;
@@ -302,6 +305,7 @@ final class RahaResolvedAd {
   final Uri? clickTrackingUri;
   final String impressionEventId;
   final bool isClickable;
+  final RahaAdRequestLogContext requestContext;
 }
 
 List<Object?> _list(Object? value) => value is List ? value : const <Object?>[];

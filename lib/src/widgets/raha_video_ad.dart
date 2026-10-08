@@ -4,6 +4,8 @@ import 'package:video_player/video_player.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import '../core/raha_adsense.dart';
+import '../core/raha_ads_debug_log.dart';
+import '../core/ad_request_log_context.dart';
 import '../core/signal_equality.dart';
 import '../core/viewability_policy.dart';
 import '../errors/raha_adsense_exception.dart';
@@ -59,6 +61,7 @@ class RahaVideoAd extends StatefulWidget {
 class _RahaVideoAdState extends State<RahaVideoAd> with WidgetsBindingObserver {
   late CancelToken _cancelToken;
   late VisibleAdRequestScheduler _requestScheduler;
+  RahaAdRequestLogContext? _activeRequestContext;
   RahaVideoAdResponse? _ad;
   VideoPlayerController? _controller;
   bool _noFill = false;
@@ -71,17 +74,21 @@ class _RahaVideoAdState extends State<RahaVideoAd> with WidgetsBindingObserver {
   bool _lastPlayingState = false;
   bool _wasPlayingBeforeBackground = false;
   double _visibleFraction = 0;
+  late final String _widgetInstanceId;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _cancelToken = CancelToken();
+    _widgetInstanceId = nextRahaWidgetInstanceId();
+    _debugLog('event=widget_mount');
     _requestScheduler = VisibleAdRequestScheduler(
-      interval: _refreshInterval,
       load: _load,
+      tryAcquireRequestSlot: _tryAcquireRequestSlot,
       onLog: _debugLog,
-      placementId: () => _ad?.info.placementId ?? 'video',
+      placementId: _placementId,
+      widgetInstanceId: _widgetInstanceId,
     );
   }
 
@@ -114,6 +121,7 @@ class _RahaVideoAdState extends State<RahaVideoAd> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _debugLog('event=widget_dispose placementId=${_placementId()}');
     _requestScheduler.dispose();
     _reset();
     super.dispose();
@@ -134,7 +142,8 @@ class _RahaVideoAdState extends State<RahaVideoAd> with WidgetsBindingObserver {
     _completed = false;
   }
 
-  Future<void> _load() async {
+  Future<void> _load(RahaAdRequestLogContext requestContext) async {
+    _activeRequestContext = requestContext;
     _cancelToken.cancel();
     _cancelToken = CancelToken();
     try {
@@ -143,6 +152,7 @@ class _RahaVideoAdState extends State<RahaVideoAd> with WidgetsBindingObserver {
         language: widget.language,
         differenceTime: widget.differenceTime,
         cancelToken: _cancelToken,
+        requestContext: requestContext,
       );
       if (!mounted || _cancelToken.isCancelled) return;
       if (ad == null) {
@@ -175,7 +185,7 @@ class _RahaVideoAdState extends State<RahaVideoAd> with WidgetsBindingObserver {
       });
       oldController?.dispose();
       widget.onLoaded?.call(ad.info);
-      _debugLog('video_initialized placementId=${ad.info.placementId}');
+      _debugLog('event=video_initialized placementId=${ad.info.placementId}');
       await controller.play();
       _logPlayingState(controller.value.isPlaying, ad.info.placementId);
       _evaluateViewability();
@@ -264,7 +274,7 @@ class _RahaVideoAdState extends State<RahaVideoAd> with WidgetsBindingObserver {
     final ad = _ad;
     if (_impressionRecorded || _impressionAbandoned) {
       _debugLog(
-        'impression_skip placementId=${ad?.info.placementId ?? 'video'} '
+        'event=impression_skip placementId=${ad?.info.placementId ?? 'video'} '
         'reason=already_sent',
       );
       return;
@@ -287,7 +297,7 @@ class _RahaVideoAdState extends State<RahaVideoAd> with WidgetsBindingObserver {
 
     if (reason != null) {
       _debugLog(
-        'impression_skip placementId=${ad?.info.placementId ?? 'video'} '
+        'event=impression_skip placementId=${ad?.info.placementId ?? 'video'} '
         'reason=$reason',
       );
       return;
@@ -295,14 +305,14 @@ class _RahaVideoAdState extends State<RahaVideoAd> with WidgetsBindingObserver {
     if (_impressionInFlight) return;
     if (_impressionAttempts >= 2) {
       _debugLog(
-        'impression_skip placementId=${ad!.info.placementId} '
+        'event=impression_skip placementId=${ad!.info.placementId} '
         'reason=already_sent',
       );
       return;
     }
 
     _debugLog(
-      'impression_eligible placementId=${ad!.info.placementId} '
+      'event=impression_eligible placementId=${ad!.info.placementId} '
       'reason=visible_playing',
     );
     _recordImpression();
@@ -350,16 +360,30 @@ class _RahaVideoAdState extends State<RahaVideoAd> with WidgetsBindingObserver {
   void _logPlayingState(bool isPlaying, String placementId) {
     if (isPlaying == _lastPlayingState) return;
     _lastPlayingState = isPlaying;
-    if (isPlaying) _debugLog('video_playing placementId=$placementId');
+    if (isPlaying) _debugLog('event=video_playing placementId=$placementId');
   }
 
-  Duration get _refreshInterval => RahaAdsense.isReady
-      ? RahaAdsense.runtime.config.adRefreshInterval
-      : const Duration(minutes: 30);
+  String _placementId() => RahaAdsense.isReady
+      ? RahaAdsense.runtime.automaticVideoPlacementId()
+      : 'video';
+
+  Duration? _tryAcquireRequestSlot() {
+    if (!RahaAdsense.isReady) return const Duration(minutes: 30);
+    return RahaAdsense.runtime.tryAcquireAutomaticRequest(_placementId());
+  }
 
   void _debugLog(String message) {
     if (RahaAdsense.isReady && RahaAdsense.runtime.config.enableDebugLogs) {
-      debugPrint('[RAHA_ADS] $message');
+      final requestContext = _activeRequestContext;
+      rahaAdsDebugLog(
+        '$message format=video visitorIdHash='
+        '${RahaAdsense.runtime.visitorIdLogFingerprint} '
+        'widgetInstanceId=$_widgetInstanceId '
+        'requestId=${requestContext?.requestId ?? 'none'} '
+        'requestSource=${requestContext?.requestSource ?? 'widget_lifecycle'} '
+        'trigger=${requestContext?.trigger ?? 'state'} '
+        'visibleFraction=$_visibleFraction',
+      );
     }
   }
 

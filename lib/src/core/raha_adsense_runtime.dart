@@ -1,9 +1,14 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
+import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
+import 'raha_ads_debug_log.dart';
+import 'ad_request_log_context.dart';
+import 'automatic_ad_request_coordinator.dart';
 import '../config/raha_adsense_config.dart';
 import '../errors/raha_adsense_exception.dart';
 import '../models/ad_response.dart';
@@ -31,6 +36,8 @@ final class RahaAdsenseRuntime {
   final RahaUrlResolver _resolver;
   final Future<String> Function()? _visitorIdLoader;
   final Uuid _uuid = const Uuid();
+  final AutomaticAdRequestCoordinator _automaticRequestCoordinator =
+      AutomaticAdRequestCoordinator();
   String? _visitorId;
 
   PlacementRegistry? _registry;
@@ -55,6 +62,23 @@ final class RahaAdsenseRuntime {
     return value;
   }
 
+  String get visitorIdLogFingerprint =>
+      sha256.convert(utf8.encode(visitorId)).toString().substring(0, 12);
+
+  String automaticBannerPlacementId(RahaBannerSize size) =>
+      _registry?.resolveBanner(size).id ?? 'banner:${size.wireValue}';
+
+  String automaticNativePlacementId() =>
+      _registry?.resolveNative().id ?? 'native';
+
+  String automaticVideoPlacementId() => _registry?.resolveVideo().id ?? 'video';
+
+  Duration? tryAcquireAutomaticRequest(String placementId) =>
+      _automaticRequestCoordinator.tryAcquire(
+        placementId,
+        config.adRefreshInterval,
+      );
+
   Future<String> _loadVisitorId() async {
     final preferences = await SharedPreferences.getInstance();
     final key = 'raha_adsense_visitor_id_${config.appId.toLowerCase()}';
@@ -77,7 +101,10 @@ final class RahaAdsenseRuntime {
     String? timeOfDay,
     Duration? differenceTime,
     CancelToken? cancelToken,
+    RahaAdRequestLogContext? requestContext,
   }) async {
+    final logContext =
+        requestContext ?? RahaAdRequestLogContext.manual('manual_adRequest');
     final registry = await _getRegistry(cancelToken: cancelToken);
     final placement = registry.resolveBanner(size);
     final decision = await _requestDecision(
@@ -92,8 +119,9 @@ final class RahaAdsenseRuntime {
         differenceTime: differenceTime,
       ),
       cancelToken: cancelToken,
+      requestContext: logContext,
     );
-    final ad = _buildAdResponse(placement, decision);
+    final ad = _buildAdResponse(placement, decision, logContext);
     if (ad == null) return null;
     if (ad is! RahaBannerAdResponse) {
       throw const RahaAdsException(
@@ -111,7 +139,10 @@ final class RahaAdsenseRuntime {
     String? timeOfDay,
     Duration? differenceTime,
     CancelToken? cancelToken,
+    RahaAdRequestLogContext? requestContext,
   }) async {
+    final logContext =
+        requestContext ?? RahaAdRequestLogContext.manual('manual_adRequest');
     final registry = await _getRegistry(cancelToken: cancelToken);
     final placement = registry.resolveVideo();
     final decision = await _requestDecision(
@@ -126,8 +157,9 @@ final class RahaAdsenseRuntime {
         differenceTime: differenceTime,
       ),
       cancelToken: cancelToken,
+      requestContext: logContext,
     );
-    final ad = _buildAdResponse(placement, decision);
+    final ad = _buildAdResponse(placement, decision, logContext);
     if (ad == null) return null;
     if (ad is! RahaVideoAdResponse) {
       throw const RahaAdsException(
@@ -145,7 +177,10 @@ final class RahaAdsenseRuntime {
     String? timeOfDay,
     Duration? differenceTime,
     CancelToken? cancelToken,
+    RahaAdRequestLogContext? requestContext,
   }) async {
+    final logContext =
+        requestContext ?? RahaAdRequestLogContext.manual('manual_adRequest');
     final registry = await _getRegistry(cancelToken: cancelToken);
     final placement = registry.resolveInterstitial();
     final decision = await _requestDecision(
@@ -160,8 +195,9 @@ final class RahaAdsenseRuntime {
         differenceTime: differenceTime,
       ),
       cancelToken: cancelToken,
+      requestContext: logContext,
     );
-    final ad = _buildAdResponse(placement, decision);
+    final ad = _buildAdResponse(placement, decision, logContext);
     if (ad == null) return null;
     if (ad is! RahaInterstitialAdResponse) {
       throw const RahaAdsException(
@@ -179,7 +215,10 @@ final class RahaAdsenseRuntime {
     String? timeOfDay,
     Duration? differenceTime,
     CancelToken? cancelToken,
+    RahaAdRequestLogContext? requestContext,
   }) async {
+    final logContext =
+        requestContext ?? RahaAdRequestLogContext.manual('manual_adRequest');
     final registry = await _getRegistry(cancelToken: cancelToken);
     final placement = registry.resolveNative();
     final decision = await _requestDecision(
@@ -194,8 +233,9 @@ final class RahaAdsenseRuntime {
         differenceTime: differenceTime,
       ),
       cancelToken: cancelToken,
+      requestContext: logContext,
     );
-    final ad = _buildAdResponse(placement, decision);
+    final ad = _buildAdResponse(placement, decision, logContext);
     if (ad == null) return null;
     if (ad is! RahaNativeAdResponse) {
       throw const RahaAdsException(
@@ -214,7 +254,10 @@ final class RahaAdsenseRuntime {
     String? timeOfDay,
     Duration? differenceTime,
     CancelToken? cancelToken,
+    RahaAdRequestLogContext? requestContext,
   }) async {
+    final logContext = requestContext ??
+        RahaAdRequestLogContext.manual('manual_requestByPlacementId');
     final registry = await _getRegistry(cancelToken: cancelToken);
     final placement = registry.resolveById(placementId);
     final decision = await _requestDecision(
@@ -229,8 +272,9 @@ final class RahaAdsenseRuntime {
         differenceTime: differenceTime,
       ),
       cancelToken: cancelToken,
+      requestContext: logContext,
     );
-    return _buildAdResponse(placement, decision);
+    return _buildAdResponse(placement, decision, logContext);
   }
 
   void dispose() {
@@ -241,26 +285,39 @@ final class RahaAdsenseRuntime {
   Future<RahaAdDecisionDto?> _requestDecision({
     required RahaPlacement placement,
     required Map<String, Object?> signals,
+    required RahaAdRequestLogContext requestContext,
     CancelToken? cancelToken,
-  }) {
-    if (config.enableDebugLogs) {
-      debugPrint(
-        '[RAHA_ADS] request_start placementId=${placement.id} '
-        'format=${placement.format.name} visitorId=$visitorId',
-      );
-    }
-    return _api.requestAd(
+  }) async {
+    final contextFields = requestContext.fields(
       placementId: placement.id,
-      signals: signals,
-      visitorId: visitorId,
-      userAgent: <String, Object?>{
-        'deviceType': config.deviceType,
-        'os': config.os,
-      },
       format: placement.format.name,
-      debugLogs: config.enableDebugLogs,
-      cancelToken: cancelToken,
+      visitorIdHash: visitorIdLogFingerprint,
     );
+    if (config.enableDebugLogs) {
+      rahaAdsDebugLog('event=request_start $contextFields');
+    }
+    try {
+      return await _api.requestAd(
+        placementId: placement.id,
+        signals: signals,
+        visitorId: visitorId,
+        visitorIdLogFingerprint: visitorIdLogFingerprint,
+        userAgent: <String, Object?>{
+          'deviceType': config.deviceType,
+          'os': config.os,
+        },
+        format: placement.format.name,
+        requestContext: requestContext,
+        debugLogs: config.enableDebugLogs,
+        cancelToken: cancelToken,
+      );
+    } on Object catch (error) {
+      _debugLog(
+        'event=request_failure $contextFields '
+        'status/error=${_safeErrorSummary(error)}',
+      );
+      rethrow;
+    }
   }
 
   Map<String, Object?> defaultSignalsForRequest({
@@ -333,6 +390,7 @@ final class RahaAdsenseRuntime {
   RahaResolvedAd _resolveCommon(
     RahaPlacement placement,
     RahaAdDecisionDto decision,
+    RahaAdRequestLogContext requestContext,
   ) {
     final expected = _expectedDecisionFormat(placement.format);
     if (decision.format != expected) {
@@ -355,22 +413,30 @@ final class RahaAdsenseRuntime {
           : _resolver.resolveTracking(clickTrackingUrl),
       impressionEventId: _uuid.v4(),
       isClickable: clickTrackingUrl != null && clickTrackingUrl.isNotEmpty,
+      requestContext: requestContext,
     );
   }
 
   RahaAdResponse? _buildAdResponse(
     RahaPlacement placement,
     RahaAdDecisionDto? decision,
+    RahaAdRequestLogContext requestContext,
   ) {
+    final contextFields = requestContext.fields(
+      placementId: placement.id,
+      format: placement.format.name,
+      visitorIdHash: visitorIdLogFingerprint,
+    );
     if (decision == null) {
-      _debugLog('request_no_fill placementId=${placement.id}');
+      _debugLog('event=request_no_fill $contextFields hasAd=false');
       return null;
     }
+    final impressionUrlPresent = decision.impressionUrl.trim().isNotEmpty;
     _debugLog(
-      'request_success placementId=${placement.id} hasAd=true '
-      'impressionUrl=${decision.impressionUrl}',
+      'event=request_success $contextFields hasAd=true '
+      'impressionUrlPresent=$impressionUrlPresent',
     );
-    final resolved = _resolveCommon(placement, decision);
+    final resolved = _resolveCommon(placement, decision, requestContext);
     return switch (placement.format) {
       RahaInventoryPlacementFormat.banner => _buildBannerAdResponse(
           placement,
@@ -556,8 +622,11 @@ final class RahaAdsenseRuntime {
 
   Future<void> _recordImpression(RahaResolvedAd ad) async {
     _debugLog(
-      'impression_attempt placementId=${ad.info.placementId} '
-      'eventId=${ad.impressionEventId} url=${ad.impressionUri}',
+      'event=impression_attempt ${ad.requestContext.fields(
+        placementId: ad.info.placementId,
+        format: ad.info.format.name,
+        visitorIdHash: visitorIdLogFingerprint,
+      )} eventId=${ad.impressionEventId}',
     );
     try {
       final result = await _api.trackImpression(
@@ -571,54 +640,103 @@ final class RahaAdsenseRuntime {
         );
       }
       _debugLog(
-        'impression_success placementId=${ad.info.placementId} '
+        'event=impression_success ${ad.requestContext.fields(
+          placementId: ad.info.placementId,
+          format: ad.info.format.name,
+          visitorIdHash: visitorIdLogFingerprint,
+        )} '
         'eventId=${ad.impressionEventId}',
       );
     } on Object catch (error) {
       final status = error is RahaAdsException ? error.statusCode : null;
       _debugLog(
-        'impression_failed placementId=${ad.info.placementId} '
-        'eventId=${ad.impressionEventId} status/error=${status ?? error}',
+        'event=impression_failure ${ad.requestContext.fields(
+          placementId: ad.info.placementId,
+          format: ad.info.format.name,
+          visitorIdHash: visitorIdLogFingerprint,
+        )} '
+        'eventId=${ad.impressionEventId} '
+        'status/error=${status ?? _safeErrorSummary(error)}',
       );
       rethrow;
     }
   }
 
   void _debugLog(String message) {
-    if (config.enableDebugLogs) debugPrint('[RAHA_ADS] $message');
+    if (config.enableDebugLogs) rahaAdsDebugLog(message);
   }
 
   Future<void> _openClick(RahaResolvedAd ad) async {
     final clickTrackingUri = ad.clickTrackingUri;
     if (clickTrackingUri == null) {
+      final eventId = _uuid.v4();
+      _debugLog(
+        'event=click_failure ${ad.requestContext.fields(
+          placementId: ad.info.placementId,
+          format: ad.info.format.name,
+          visitorIdHash: visitorIdLogFingerprint,
+        )} eventId=$eventId status/error=not_clickable',
+      );
       throw const RahaAdsException(
         RahaAdsErrorCode.clickLaunch,
         'This ad has no click destination.',
       );
     }
-    final result = await _api.trackClick(
-      clickTrackingUri,
-      eventId: _uuid.v4(),
+    final eventId = _uuid.v4();
+    _debugLog(
+      'event=click_attempt ${ad.requestContext.fields(
+        placementId: ad.info.placementId,
+        format: ad.info.format.name,
+        visitorIdHash: visitorIdLogFingerprint,
+      )} eventId=$eventId',
     );
-    if (!result.isValid) {
-      throw RahaAdsException(
-        RahaAdsErrorCode.trackingRejected,
-        'Raha rejected the click event.',
-      );
-    }
-    final redirect = result.redirectUrl;
-    final uri = _parseTrackedRedirect(redirect);
-    final opener = config.clickOpener ?? _launchWithUrlLauncher;
     try {
+      final result = await _api.trackClick(
+        clickTrackingUri,
+        eventId: eventId,
+      );
+      if (!result.isValid) {
+        throw RahaAdsException(
+          RahaAdsErrorCode.trackingRejected,
+          'Raha rejected the click event.',
+        );
+      }
+      _debugLog(
+        'event=click_success ${ad.requestContext.fields(
+          placementId: ad.info.placementId,
+          format: ad.info.format.name,
+          visitorIdHash: visitorIdLogFingerprint,
+        )} eventId=$eventId',
+      );
+      final redirect = result.redirectUrl;
+      final uri = _parseTrackedRedirect(redirect);
+      final opener = config.clickOpener ?? _launchWithUrlLauncher;
       await Future<void>.sync(() => opener(uri, ad.info));
-    } on RahaAdsException {
+    } on RahaAdsException catch (error) {
+      final status = error.statusCode;
+      _debugLog(
+        'event=click_failure ${ad.requestContext.fields(
+          placementId: ad.info.placementId,
+          format: ad.info.format.name,
+          visitorIdHash: visitorIdLogFingerprint,
+        )} eventId=$eventId '
+        'status/error=${status ?? _safeErrorSummary(error)}',
+      );
       rethrow;
     } on Object catch (error) {
-      throw RahaAdsException(
+      final wrapped = RahaAdsException(
         RahaAdsErrorCode.clickLaunch,
         'Custom Raha click opener failed.',
         cause: error,
       );
+      _debugLog(
+        'event=click_failure ${ad.requestContext.fields(
+          placementId: ad.info.placementId,
+          format: ad.info.format.name,
+          visitorIdHash: visitorIdLogFingerprint,
+        )} eventId=$eventId status/error=${_safeErrorSummary(wrapped)}',
+      );
+      throw wrapped;
     }
   }
 
@@ -685,4 +803,14 @@ final class RahaAdsenseRuntime {
       );
     }
   }
+}
+
+String _safeErrorSummary(Object error) {
+  if (error is RahaAdsException) {
+    final status = error.statusCode;
+    return status == null
+        ? error.code.name
+        : '${error.code.name} status=$status';
+  }
+  return error.runtimeType.toString();
 }

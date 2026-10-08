@@ -1,33 +1,45 @@
 import 'dart:async';
 
+import 'package:uuid/uuid.dart';
+
+import '../core/ad_request_log_context.dart';
+
 /// Coordinates automatic ad requests for one visible widget slot.
 final class VisibleAdRequestScheduler {
   VisibleAdRequestScheduler({
-    required this.interval,
     required this.load,
+    required this.tryAcquireRequestSlot,
     required this.onLog,
     required this.placementId,
+    required this.widgetInstanceId,
   });
 
-  final Duration interval;
-  final Future<void> Function() load;
+  final Future<void> Function(RahaAdRequestLogContext context) load;
+  final Duration? Function() tryAcquireRequestSlot;
   final void Function(String message) onLog;
   final String Function() placementId;
+  final String widgetInstanceId;
 
   Timer? _timer;
-  DateTime? _lastRequestAt;
   bool _visible = false;
   bool _pending = true;
   bool _loading = false;
   bool _disposed = false;
+  bool _hasRequested = false;
+  bool _waitedForRequestSlot = false;
+  double _visibleFraction = 0;
+  String _pendingTrigger = 'visibility';
+  static const Uuid _uuid = Uuid();
 
   void updateVisibility(double visibleFraction) {
     if (_disposed) return;
     final wasVisible = _visible;
+    _visibleFraction = visibleFraction;
     _visible = visibleFraction > 0;
     if (!_visible) {
       if (_timer != null && _pending) {
-        onLog('refresh_skip placementId=${placementId()} reason=not_visible');
+        onLog('event=refresh_skip placementId=${placementId()} '
+            'reason=not_visible');
       }
       _timer?.cancel();
       _timer = null;
@@ -35,7 +47,7 @@ final class VisibleAdRequestScheduler {
     }
     if (!wasVisible) {
       onLog(
-        'visible placementId=${placementId()} '
+        'event=visible placementId=${placementId()} '
         'visibleFraction=$visibleFraction',
       );
     }
@@ -45,8 +57,10 @@ final class VisibleAdRequestScheduler {
   void requestRefresh() {
     if (_disposed) return;
     _pending = true;
+    _pendingTrigger = 'changed_inputs';
     if (!_visible) {
-      onLog('refresh_skip placementId=${placementId()} reason=not_visible');
+      onLog('event=refresh_skip placementId=${placementId()} '
+          'reason=not_visible');
       return;
     }
     _scheduleOrLoad();
@@ -54,28 +68,23 @@ final class VisibleAdRequestScheduler {
 
   void _scheduleOrLoad() {
     if (_disposed || !_visible || _loading || !_pending) return;
-    final lastRequestAt = _lastRequestAt;
-    final elapsed = lastRequestAt == null
-        ? interval
-        : DateTime.now().difference(lastRequestAt);
-    if (lastRequestAt != null && elapsed < interval) {
-      final remaining = interval - elapsed;
+    final remaining = tryAcquireRequestSlot();
+    if (remaining != null) {
+      _waitedForRequestSlot = true;
       onLog(
-        'refresh_skip placementId=${placementId()} '
-        'reason=interval_not_reached',
+        'event=refresh_skip placementId=${placementId()} '
+        'reason=interval_not_reached '
+        'remainingMs=${remaining.inMilliseconds}',
       );
       _timer?.cancel();
-      _timer = Timer(remaining, () {
+      _timer = Timer(remaining.isNegative ? Duration.zero : remaining, () {
         _timer = null;
-        if (_visible && !_disposed && _pending) {
-          onLog('refresh_allowed placementId=${placementId()}');
-          _startLoad();
-        }
+        if (_visible && !_disposed && _pending) _scheduleOrLoad();
       });
       return;
     }
-    if (lastRequestAt != null) {
-      onLog('refresh_allowed placementId=${placementId()}');
+    if (_hasRequested || _waitedForRequestSlot) {
+      onLog('event=refresh_allowed placementId=${placementId()}');
     }
     _startLoad();
   }
@@ -84,19 +93,28 @@ final class VisibleAdRequestScheduler {
     if (_disposed || !_visible || _loading || !_pending) return;
     _pending = false;
     _loading = true;
-    _lastRequestAt = DateTime.now();
-    unawaited(_runLoad());
+    final context = RahaAdRequestLogContext(
+      requestId: _uuid.v4(),
+      requestSource: _hasRequested ? 'auto_refresh' : 'auto_visible',
+      trigger: _pendingTrigger,
+      widgetInstanceId: widgetInstanceId,
+      visibleFraction: _visibleFraction,
+    );
+    _hasRequested = true;
+    _waitedForRequestSlot = false;
+    _pendingTrigger = 'interval';
+    unawaited(_runLoad(context));
   }
 
-  Future<void> _runLoad() async {
+  Future<void> _runLoad(RahaAdRequestLogContext context) async {
     try {
-      await load();
+      await load(context);
     } finally {
       _loading = false;
-      if (!_disposed && _visible) {
-        // Schedule the next automatic refresh, including after no-fill.
+      if (!_disposed) {
+        // Keep a refresh pending if the request finishes while offscreen.
         _pending = true;
-        _scheduleOrLoad();
+        if (_visible) _scheduleOrLoad();
       }
     }
   }

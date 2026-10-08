@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:raha_adsense/src/config/raha_adsense_config.dart';
@@ -39,6 +40,55 @@ void main() {
     expect(banner.height, 50);
     expect(banner.isClickable, isTrue);
     expect(server.requestedPlacementIds, contains('banner-placement'));
+  });
+
+  test('explicit placement requests remain caller-controlled', () async {
+    final runtime = await _runtime(server);
+    addTearDown(runtime.dispose);
+
+    await runtime.requestAdByPlacementId(
+      placementId: 'banner-placement',
+      signals: const {},
+    );
+    await runtime.requestAdByPlacementId(
+      placementId: 'banner-placement',
+      signals: const {},
+    );
+
+    expect(server.requestedPlacementIds, [
+      'banner-placement',
+      'banner-placement',
+    ]);
+  });
+
+  test('structured request and tracking logs redact IDs and URLs', () async {
+    final runtime = await _runtime(server, enableDebugLogs: true);
+    addTearDown(runtime.dispose);
+    final originalDebugPrint = debugPrint;
+    final logs = <String>[];
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) logs.add(message);
+    };
+    addTearDown(() => debugPrint = originalDebugPrint);
+
+    final ad = await runtime.requestAdByPlacementId(
+      placementId: 'banner-placement',
+      signals: const {'genre': 'news'},
+    );
+    await ad!.recordImpression();
+    await ad.openClick();
+
+    final combined = logs.join('\n');
+    expect(combined, contains('[RAHA_ADS] 20'));
+    expect(combined, contains('event=request_start'));
+    expect(combined, contains('requestSource=manual_requestByPlacementId'));
+    expect(combined, contains('event=request_body'));
+    expect(combined, contains('bodyKeys='));
+    expect(combined, contains('event=impression_attempt'));
+    expect(combined, contains('event=click_attempt'));
+    expect(combined, isNot(contains('stable-test-visitor-id')));
+    expect(combined, isNot(contains('/tracking/')));
+    expect(combined, isNot(contains('impressionUrl=')));
   });
 
   test('serializes exact visitorId and userAgent with flat contextual signals',
@@ -191,6 +241,7 @@ void main() {
 Future<RahaAdsenseRuntime> _runtime(
   _TestAdServer server, {
   bool usePersistedVisitorId = false,
+  bool enableDebugLogs = false,
 }) async {
   final runtime = RahaAdsenseRuntime(
     config: RahaAdsenseConfig.forTesting(
@@ -203,6 +254,7 @@ Future<RahaAdsenseRuntime> _runtime(
       deviceType: 'phone',
       os: 'android',
       clickOpener: (uri, _) async {},
+      enableDebugLogs: enableDebugLogs,
     ),
     visitorIdLoader:
         usePersistedVisitorId ? null : () async => 'stable-test-visitor-id',
