@@ -26,7 +26,19 @@ sealed class RahaAdResponse {
 
   /// Record the ad impression once, if it has not already been recorded.
   Future<void> recordImpression() {
-    return _impressionFuture ??= Future<void>.sync(_recordImpression);
+    final current = _impressionFuture;
+    if (current != null) return current;
+
+    late final Future<void> attempt;
+    attempt = Future<void>.sync(_recordImpression).then<void>(
+      (_) {},
+      onError: (Object error, StackTrace stackTrace) {
+        if (identical(_impressionFuture, attempt)) _impressionFuture = null;
+        Error.throwWithStackTrace(error, stackTrace);
+      },
+    );
+    _impressionFuture = attempt;
+    return attempt;
   }
 
   /// Open the ad's click destination, throwing if the ad is not clickable.

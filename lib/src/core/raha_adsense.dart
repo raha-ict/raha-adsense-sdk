@@ -26,10 +26,19 @@ abstract final class RahaAdsense {
     required String deviceType,
     required String os,
     RahaClickOpener? clickOpener,
+    Duration adRefreshInterval = const Duration(minutes: 30),
+    bool? enableDebugLogs,
     RahaAdsenseEnvironment environment = RahaAdsenseEnvironment.production,
   }) async {
     if (_runtime != null) {
       throw StateError('RahaAdsense.setup() may be called only once.');
+    }
+    if (adRefreshInterval <= Duration.zero) {
+      throw ArgumentError.value(
+        adRefreshInterval,
+        'adRefreshInterval',
+        'Must be greater than zero.',
+      );
     }
     final runtime = RahaAdsenseRuntime(
       config: RahaAdsenseConfig.production(
@@ -37,6 +46,8 @@ abstract final class RahaAdsense {
         deviceType: deviceType,
         os: os,
         clickOpener: clickOpener,
+        adRefreshInterval: adRefreshInterval,
+        enableDebugLogs: enableDebugLogs,
         environment: environment,
       ),
     );
@@ -148,6 +159,12 @@ abstract final class RahaAdsense {
       );
     }
     return value;
+  }
+
+  @visibleForTesting
+  static void setRuntimeForTesting(RahaAdsenseRuntime runtime) {
+    _runtime?.dispose();
+    _runtime = runtime;
   }
 
   @visibleForTesting

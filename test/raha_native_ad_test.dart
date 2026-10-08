@@ -1,14 +1,19 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:raha_adsense/raha_adsense.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 void main() {
+  setUp(() {
+    VisibilityDetectorController.instance.updateInterval = Duration.zero;
+  });
   tearDown(RahaAdsense.resetForTesting);
 
   testWidgets('native no-fill surface can be built', (tester) async {
     expect(RahaAdFormat.native, isNotNull);
   });
 
-  testWidgets('reloads when difference time changes', (tester) async {
+  testWidgets('does not issue requests before SDK setup on input change',
+      (tester) async {
     var errors = 0;
 
     await tester.pumpWidget(
@@ -27,10 +32,11 @@ void main() {
     );
     await tester.pump();
 
-    expect(errors, 2);
+    expect(errors, 0);
   });
 
-  testWidgets('reloads when language changes', (tester) async {
+  testWidgets('does not issue requests before SDK setup on language change',
+      (tester) async {
     var errors = 0;
 
     await tester.pumpWidget(
@@ -49,6 +55,6 @@ void main() {
     );
     await tester.pump();
 
-    expect(errors, 2);
+    expect(errors, 0);
   });
 }

@@ -2,9 +2,11 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+
+import '../core/raha_ads_debug_log.dart';
+import '../core/ad_request_log_context.dart';
 import 'package:flutter/widgets.dart';
 import 'package:intl/intl.dart';
-import 'package:pretty_dio_logger/pretty_dio_logger.dart';
 
 import '../config/raha_adsense_config.dart';
 import '../errors/raha_adsense_exception.dart';
@@ -27,18 +29,6 @@ Dio buildRahaDio(RahaAdsenseConfig config) {
       headers: const {'Accept': 'application/json'},
     ),
   );
-
-  if (config.enableDebugLogs) {
-    dio.interceptors.add(
-      PrettyDioLogger(
-        requestHeader: true,
-        responseHeader: true,
-        error: true,
-        compact: true,
-        enabled: config.enableDebugLogs,
-      ),
-    );
-  }
 
   return dio;
 }
@@ -80,13 +70,38 @@ final class RahaAdsenseApi {
   Future<RahaAdDecisionDto?> requestAd({
     required String placementId,
     required Map<String, Object?> signals,
+    required String visitorId,
+    required String visitorIdLogFingerprint,
+    required Map<String, Object?> userAgent,
+    required String format,
+    required RahaAdRequestLogContext requestContext,
+    bool debugLogs = false,
     CancelToken? cancelToken,
   }) async {
-    final body = validateAndNormalizePublisherSignals(signals);
+    final normalizedSignals = validateAndNormalizePublisherSignals(signals);
+    final body = <String, Object?>{
+      'visitorId': visitorId,
+      'userAgent': userAgent,
+      ...normalizedSignals,
+    };
     final encoded = jsonEncode(body);
     if (utf8.encode(encoded).length > 16 * 1024) {
       throw const RahaAdsException.invalidRequest(
         'Signals exceed the 16 KiB request limit.',
+      );
+    }
+
+    if (debugLogs) {
+      rahaAdsDebugLog(
+        'event=request_body ${requestContext.fields(
+          placementId: placementId,
+          format: format,
+          visitorIdHash: visitorIdLogFingerprint,
+        )} bodyKeys=${<String>{
+          'visitorId',
+          'userAgent',
+          ...normalizedSignals.keys
+        }.join(',')}',
       );
     }
 
@@ -129,6 +144,7 @@ final class RahaAdsenseApi {
       eventId: eventId,
       expectedType: 'impression',
       captureRedirect: false,
+      retryOnce: false,
       cancelToken: cancelToken,
     );
   }
@@ -204,27 +220,34 @@ final class RahaAdsenseApi {
     required String eventId,
     required String expectedType,
     required bool captureRedirect,
+    required bool retryOnce,
     CancelToken? cancelToken,
   }) async {
     final trackedUri = _appendEventId(uri, eventId);
     final response = await _guardNetwork(
-      () => withOneRetry<Response<String>>(
-        () => _dio.getUri<String>(
-          trackedUri,
-          cancelToken: cancelToken,
-          options: Options(
-            followRedirects: !captureRedirect,
-            validateStatus: captureRedirect
-                ? (status) =>
-                    status != null &&
-                    (status == 200 ||
-                        status == 204 ||
-                        _isRedirectStatus(status))
-                : null,
-          ),
-        ),
-        cancelToken: cancelToken,
-      ),
+      () {
+        Future<Response<String>> request() => _dio.getUri<String>(
+              trackedUri,
+              cancelToken: cancelToken,
+              options: Options(
+                followRedirects: !captureRedirect,
+                validateStatus: captureRedirect
+                    ? (status) =>
+                        status != null &&
+                        (status == 200 ||
+                            status == 204 ||
+                            _isRedirectStatus(status))
+                    : null,
+              ),
+            );
+        if (retryOnce) {
+          return withOneRetry<Response<String>>(
+            request,
+            cancelToken: cancelToken,
+          );
+        }
+        return request();
+      },
     );
     if (captureRedirect && _isRedirectStatus(response.statusCode)) {
       final location = response.headers.value('location');
@@ -568,8 +591,8 @@ String _describeDioError(DioException error) {
 void _logMalformedTracking(Response<dynamic> response, String expectedType) {
   if (!kDebugMode) return;
   final contentType = response.headers.value(Headers.contentTypeHeader);
-  debugPrint(
-    '[Raha Adsense] tracking $expectedType response malformed: '
+  rahaAdsDebugLog(
+    'tracking $expectedType response malformed: '
     'HTTP ${response.statusCode}, content-type ${contentType ?? 'unknown'}',
   );
 }

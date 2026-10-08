@@ -5,11 +5,15 @@ import 'package:flutter/material.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import '../core/raha_adsense.dart';
+import '../core/raha_ads_debug_log.dart';
+import '../core/ad_request_log_context.dart';
+import '../core/signal_equality.dart';
 import '../core/viewability_policy.dart';
 import '../errors/raha_adsense_exception.dart';
 import '../models/ad_response.dart';
 import '../models/models.dart';
 import 'banner_creative.dart';
+import 'visible_ad_request_scheduler.dart';
 
 /// A widget that displays a Raha banner ad.
 ///
@@ -66,6 +70,8 @@ class RahaBannerAd extends StatefulWidget {
 class _RahaBannerAdState extends State<RahaBannerAd>
     with WidgetsBindingObserver {
   late CancelToken _cancelToken;
+  late VisibleAdRequestScheduler _requestScheduler;
+  RahaAdRequestLogContext? _activeRequestContext;
   RahaBannerAdResponse? _ad;
   bool _noFill = false;
   bool _imageDecoded = false;
@@ -73,50 +79,58 @@ class _RahaBannerAdState extends State<RahaBannerAd>
   double _visibleFraction = 0;
   Timer? _impressionTimer;
   bool _impressionRecorded = false;
+  late final String _widgetInstanceId;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _cancelToken = CancelToken();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _load();
-    });
+    _widgetInstanceId = nextRahaWidgetInstanceId();
+    _debugLog('event=widget_mount');
+    _requestScheduler = VisibleAdRequestScheduler(
+      load: _load,
+      tryAcquireRequestSlot: _tryAcquireRequestSlot,
+      onLog: _debugLog,
+      placementId: _placementId,
+      widgetInstanceId: _widgetInstanceId,
+    );
   }
 
   @override
   void didUpdateWidget(covariant RahaBannerAd oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.size != widget.size ||
-        oldWidget.signals != widget.signals ||
+        !samePublisherSignals(oldWidget.signals, widget.signals) ||
         oldWidget.language != widget.language ||
         oldWidget.differenceTime != widget.differenceTime) {
-      _cancelToken.cancel();
-      _impressionTimer?.cancel();
-      _cancelToken = CancelToken();
-      _ad = null;
-      _noFill = false;
-      _imageDecoded = false;
-      _impressionRecorded = false;
-      _load();
+      _requestScheduler.requestRefresh();
     }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _foreground = state == AppLifecycleState.resumed;
+    _requestScheduler.updateVisibility(
+      _foreground ? _visibleFraction : 0,
+    );
     _evaluateViewability();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _debugLog('event=widget_dispose placementId=${_placementId()}');
+    _requestScheduler.dispose();
     _impressionTimer?.cancel();
     _cancelToken.cancel();
     super.dispose();
   }
 
-  Future<void> _load() async {
+  Future<void> _load(RahaAdRequestLogContext requestContext) async {
+    _activeRequestContext = requestContext;
+    _cancelToken.cancel();
+    _cancelToken = CancelToken();
     try {
       final ad = await RahaAdsense.runtime.requestBannerAd(
         size: widget.size,
@@ -124,8 +138,13 @@ class _RahaBannerAdState extends State<RahaBannerAd>
         language: widget.language,
         differenceTime: widget.differenceTime,
         cancelToken: _cancelToken,
+        requestContext: requestContext,
       );
       if (!mounted || _cancelToken.isCancelled) return;
+      _impressionTimer?.cancel();
+      _impressionTimer = null;
+      _imageDecoded = false;
+      _impressionRecorded = false;
       setState(() {
         _ad = ad;
         _noFill = ad == null;
@@ -140,7 +159,25 @@ class _RahaBannerAdState extends State<RahaBannerAd>
 
   @override
   Widget build(BuildContext context) {
-    if (_noFill) return const SizedBox.shrink();
+    return VisibilityDetector(
+      key: ObjectKey(this),
+      onVisibilityChanged: (info) {
+        _visibleFraction = info.visibleFraction;
+        _requestScheduler.updateVisibility(info.visibleFraction);
+        _evaluateViewability();
+      },
+      child: _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
+    if (_noFill) {
+      return _buildBannerFrame(
+        width: widget.size.width.toDouble(),
+        height: widget.size.height.toDouble(),
+        child: const SizedBox.expand(),
+      );
+    }
     return LayoutBuilder(
       builder: (context, constraints) {
         if (widget.fit == BoxFit.none &&
@@ -164,17 +201,10 @@ class _RahaBannerAdState extends State<RahaBannerAd>
           );
         }
 
-        return VisibilityDetector(
-          key: ValueKey('raha-banner-${ad.info.adId}-${ad.info.placementId}'),
-          onVisibilityChanged: (info) {
-            _visibleFraction = info.visibleFraction;
-            _evaluateViewability();
-          },
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => _handleClick(ad),
-            child: _buildFilledBanner(ad),
-          ),
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _handleClick(ad),
+          child: _buildFilledBanner(ad),
         );
       },
     );
@@ -256,15 +286,41 @@ class _RahaBannerAdState extends State<RahaBannerAd>
   }
 
   Future<void> _recordImpression() async {
+    _impressionTimer = null;
     final ad = _ad;
     if (ad == null || _impressionRecorded) return;
+    _impressionRecorded = true;
     try {
       await ad.recordImpression();
       if (!mounted) return;
-      _impressionRecorded = true;
       widget.onImpression?.call(ad.info);
     } on Object catch (error) {
+      _impressionRecorded = false;
       if (mounted) widget.onError?.call(_asRahaError(error));
+    }
+  }
+
+  String _placementId() => RahaAdsense.isReady
+      ? RahaAdsense.runtime.automaticBannerPlacementId(widget.size)
+      : 'banner:${widget.size.wireValue}';
+
+  Duration? _tryAcquireRequestSlot() {
+    if (!RahaAdsense.isReady) return const Duration(minutes: 30);
+    return RahaAdsense.runtime.tryAcquireAutomaticRequest(_placementId());
+  }
+
+  void _debugLog(String message) {
+    if (RahaAdsense.isReady && RahaAdsense.runtime.config.enableDebugLogs) {
+      final requestContext = _activeRequestContext;
+      rahaAdsDebugLog(
+        '$message format=banner visitorIdHash='
+        '${RahaAdsense.runtime.visitorIdLogFingerprint} '
+        'widgetInstanceId=$_widgetInstanceId '
+        'requestId=${requestContext?.requestId ?? 'none'} '
+        'requestSource=${requestContext?.requestSource ?? 'widget_lifecycle'} '
+        'trigger=${requestContext?.trigger ?? 'state'} '
+        'visibleFraction=$_visibleFraction',
+      );
     }
   }
 
