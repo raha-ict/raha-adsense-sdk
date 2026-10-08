@@ -17,6 +17,7 @@ void main() {
       config.endpoints.cdnBaseUrl,
       Uri.parse('https://cdn.raha.af/adsense/'),
     );
+    expect(config.adRefreshInterval, const Duration(minutes: 30));
   });
 
   test('production config accepts explicit production environment', () {

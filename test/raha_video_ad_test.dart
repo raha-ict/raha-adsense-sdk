@@ -1,7 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:raha_adsense/raha_adsense.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 void main() {
+  setUp(() {
+    VisibilityDetectorController.instance.updateInterval = Duration.zero;
+  });
   tearDown(RahaAdsense.resetForTesting);
 
   test('public API exports v2 formats', () {
@@ -24,7 +28,8 @@ void main() {
     expect(RahaAdsense.requestByPlacementId, isA<Function>());
   });
 
-  testWidgets('video reloads when difference time changes', (tester) async {
+  testWidgets('video coalesces difference-time change until refresh interval',
+      (tester) async {
     var errors = 0;
 
     await tester.pumpWidget(
@@ -43,10 +48,11 @@ void main() {
     );
     await tester.pump();
 
-    expect(errors, 2);
+    expect(errors, 1);
   });
 
-  testWidgets('video reloads when language changes', (tester) async {
+  testWidgets('video coalesces language change until refresh interval',
+      (tester) async {
     var errors = 0;
 
     await tester.pumpWidget(
@@ -65,6 +71,6 @@ void main() {
     );
     await tester.pump();
 
-    expect(errors, 2);
+    expect(errors, 1);
   });
 }

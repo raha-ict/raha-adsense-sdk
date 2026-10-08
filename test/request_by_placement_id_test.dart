@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:raha_adsense/src/config/raha_adsense_config.dart';
 import 'package:raha_adsense/src/config/raha_adsense_endpoints.dart';
 import 'package:raha_adsense/src/core/raha_adsense_runtime.dart';
@@ -13,6 +14,7 @@ void main() {
   late _TestAdServer server;
 
   setUp(() async {
+    SharedPreferences.setMockInitialValues({});
     server = await _TestAdServer.start();
   });
 
@@ -37,6 +39,58 @@ void main() {
     expect(banner.height, 50);
     expect(banner.isClickable, isTrue);
     expect(server.requestedPlacementIds, contains('banner-placement'));
+  });
+
+  test('serializes exact visitorId and userAgent with flat contextual signals',
+      () async {
+    final runtime = await _runtime(server);
+    addTearDown(runtime.dispose);
+
+    await runtime.requestAdByPlacementId(
+      placementId: 'banner-placement',
+      signals: const {'genre': 'news', 'screen': 'home'},
+    );
+
+    final body = server.requestBodies.single;
+    expect(body['visitorId'], 'stable-test-visitor-id');
+    expect(body.containsKey('visitor_id'), isFalse);
+    expect(body['userAgent'], {'deviceType': 'phone', 'os': 'android'});
+    expect(body['genre'], 'news');
+    expect(body['screen'], 'home');
+    expect(body['device_type'], 'phone');
+    expect(body['os'], 'ANDROID');
+    expect(body.containsKey('signals'), isFalse);
+  });
+
+  test('persists the same visitorId across runtime instances', () async {
+    final firstRuntime = await _runtime(server, usePersistedVisitorId: true);
+    await firstRuntime.requestAdByPlacementId(
+      placementId: 'banner-placement',
+      signals: const {},
+    );
+    final firstVisitorId = server.requestBodies.last['visitorId'];
+    firstRuntime.dispose();
+
+    final secondRuntime = await _runtime(server, usePersistedVisitorId: true);
+    addTearDown(secondRuntime.dispose);
+    await secondRuntime.requestAdByPlacementId(
+      placementId: 'banner-placement',
+      signals: const {},
+    );
+
+    expect(server.requestBodies.last['visitorId'], firstVisitorId);
+    expect(firstVisitorId, isA<String>());
+  });
+
+  test('video click tracking is untouched until openClick is called', () async {
+    final runtime = await _runtime(server);
+    addTearDown(runtime.dispose);
+    final ad = await runtime.requestVideoAd(signals: const {});
+
+    expect(server.clickRequests, isEmpty);
+    await ad!.openClick();
+    expect(server.clickRequests, hasLength(1));
+    expect(server.clickRequests.single.path, '/tracking/click/video-ad');
   });
 
   test('returns video native and interstitial responses for placement ids',
@@ -134,7 +188,10 @@ void main() {
   });
 }
 
-Future<RahaAdsenseRuntime> _runtime(_TestAdServer server) async {
+Future<RahaAdsenseRuntime> _runtime(
+  _TestAdServer server, {
+  bool usePersistedVisitorId = false,
+}) async {
   final runtime = RahaAdsenseRuntime(
     config: RahaAdsenseConfig.forTesting(
       appId: _appId,
@@ -145,7 +202,10 @@ Future<RahaAdsenseRuntime> _runtime(_TestAdServer server) async {
       ),
       deviceType: 'phone',
       os: 'android',
+      clickOpener: (uri, _) async {},
     ),
+    visitorIdLoader:
+        usePersistedVisitorId ? null : () async => 'stable-test-visitor-id',
   );
   await runtime.initialize();
   return runtime;
@@ -156,6 +216,10 @@ final class _TestAdServer {
 
   final HttpServer _server;
   final requestedPlacementIds = <String>[];
+  final requestBodies = <Map<String, Object?>>[];
+  final impressionRequests = <Uri>[];
+  final clickRequests = <Uri>[];
+  int impressionFailureCount = 0;
 
   Uri get origin => Uri.parse('http://127.0.0.1:${_server.port}');
 
@@ -195,13 +259,40 @@ final class _TestAdServer {
           request.uri.pathSegments[3] == 'request') {
         final placementId = Uri.decodeComponent(request.uri.pathSegments[4]);
         requestedPlacementIds.add(placementId);
-        await request.drain<void>();
+        final rawBody = await utf8.decoder.bind(request).join();
+        requestBodies.add(
+          (jsonDecode(rawBody) as Map).cast<String, Object?>(),
+        );
         if (placementId == 'nofill-placement') {
           request.response.statusCode = HttpStatus.noContent;
           await request.response.close();
           return;
         }
         await _sendJson(request.response, _decisionFor(placementId));
+        return;
+      }
+
+      if (request.method == 'GET' &&
+          request.uri.path.startsWith('/tracking/impression/')) {
+        impressionRequests.add(request.uri);
+        if (impressionFailureCount > 0) {
+          impressionFailureCount--;
+          request.response.statusCode = HttpStatus.internalServerError;
+          await request.response.close();
+          return;
+        }
+        await _sendJson(request.response, const {'isValid': true});
+        return;
+      }
+
+      if (request.method == 'GET' &&
+          request.uri.path.startsWith('/tracking/click/')) {
+        clickRequests.add(request.uri);
+        request.response
+          ..statusCode = HttpStatus.found
+          ..headers
+              .set(HttpHeaders.locationHeader, 'https://advertiser.example');
+        await request.response.close();
         return;
       }
 

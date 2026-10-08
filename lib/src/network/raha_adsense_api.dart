@@ -80,13 +80,29 @@ final class RahaAdsenseApi {
   Future<RahaAdDecisionDto?> requestAd({
     required String placementId,
     required Map<String, Object?> signals,
+    required String visitorId,
+    required Map<String, Object?> userAgent,
+    required String format,
+    bool debugLogs = false,
     CancelToken? cancelToken,
   }) async {
-    final body = validateAndNormalizePublisherSignals(signals);
+    final normalizedSignals = validateAndNormalizePublisherSignals(signals);
+    final body = <String, Object?>{
+      'visitorId': visitorId,
+      'userAgent': userAgent,
+      ...normalizedSignals,
+    };
     final encoded = jsonEncode(body);
     if (utf8.encode(encoded).length > 16 * 1024) {
       throw const RahaAdsException.invalidRequest(
         'Signals exceed the 16 KiB request limit.',
+      );
+    }
+
+    if (debugLogs) {
+      debugPrint(
+        '[RAHA_ADS] request_body placementId=$placementId format=$format '
+        '$encoded',
       );
     }
 
@@ -129,6 +145,7 @@ final class RahaAdsenseApi {
       eventId: eventId,
       expectedType: 'impression',
       captureRedirect: false,
+      retryOnce: false,
       cancelToken: cancelToken,
     );
   }
@@ -204,27 +221,34 @@ final class RahaAdsenseApi {
     required String eventId,
     required String expectedType,
     required bool captureRedirect,
+    required bool retryOnce,
     CancelToken? cancelToken,
   }) async {
     final trackedUri = _appendEventId(uri, eventId);
     final response = await _guardNetwork(
-      () => withOneRetry<Response<String>>(
-        () => _dio.getUri<String>(
-          trackedUri,
-          cancelToken: cancelToken,
-          options: Options(
-            followRedirects: !captureRedirect,
-            validateStatus: captureRedirect
-                ? (status) =>
-                    status != null &&
-                    (status == 200 ||
-                        status == 204 ||
-                        _isRedirectStatus(status))
-                : null,
-          ),
-        ),
-        cancelToken: cancelToken,
-      ),
+      () {
+        Future<Response<String>> request() => _dio.getUri<String>(
+              trackedUri,
+              cancelToken: cancelToken,
+              options: Options(
+                followRedirects: !captureRedirect,
+                validateStatus: captureRedirect
+                    ? (status) =>
+                        status != null &&
+                        (status == 200 ||
+                            status == 204 ||
+                            _isRedirectStatus(status))
+                    : null,
+              ),
+            );
+        if (retryOnce) {
+          return withOneRetry<Response<String>>(
+            request,
+            cancelToken: cancelToken,
+          );
+        }
+        return request();
+      },
     );
     if (captureRedirect && _isRedirectStatus(response.statusCode)) {
       final location = response.headers.value('location');

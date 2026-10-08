@@ -1,4 +1,6 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
@@ -19,13 +21,17 @@ final class RahaAdsenseRuntime {
     required this.config,
     RahaAdsenseApi? api,
     RahaUrlResolver? resolver,
+    Future<String> Function()? visitorIdLoader,
   })  : _api = api ?? RahaAdsenseApi(dio: buildRahaDio(config)),
-        _resolver = resolver ?? RahaUrlResolver(config.endpoints);
+        _resolver = resolver ?? RahaUrlResolver(config.endpoints),
+        _visitorIdLoader = visitorIdLoader;
 
   final RahaAdsenseConfig config;
   final RahaAdsenseApi _api;
   final RahaUrlResolver _resolver;
+  final Future<String> Function()? _visitorIdLoader;
   final Uuid _uuid = const Uuid();
+  String? _visitorId;
 
   PlacementRegistry? _registry;
   DateTime? _inventoryLoadedAt;
@@ -37,7 +43,29 @@ final class RahaAdsenseRuntime {
   /// This method is called once during initial SDK setup.
   Future<void> initialize({CancelToken? cancelToken}) async {
     _validateAppId(config.appId);
+    _visitorId = await (_visitorIdLoader?.call() ?? _loadVisitorId());
     await _getRegistry(cancelToken: cancelToken, forceRefresh: true);
+  }
+
+  String get visitorId {
+    final value = _visitorId;
+    if (value == null) {
+      throw StateError('RahaAdsenseRuntime.initialize() has not completed.');
+    }
+    return value;
+  }
+
+  Future<String> _loadVisitorId() async {
+    final preferences = await SharedPreferences.getInstance();
+    final key = 'raha_adsense_visitor_id_${config.appId.toLowerCase()}';
+    final existing = preferences.getString(key)?.trim();
+    if (existing != null && existing.isNotEmpty) return existing;
+    final created = _uuid.v4();
+    final stored = await preferences.setString(key, created);
+    if (!stored) {
+      throw StateError('Could not persist the Raha visitor ID.');
+    }
+    return created;
   }
 
   /// Request a banner ad decision and convert it into a response object.
@@ -215,9 +243,22 @@ final class RahaAdsenseRuntime {
     required Map<String, Object?> signals,
     CancelToken? cancelToken,
   }) {
+    if (config.enableDebugLogs) {
+      debugPrint(
+        '[RAHA_ADS] request_start placementId=${placement.id} '
+        'format=${placement.format.name} visitorId=$visitorId',
+      );
+    }
     return _api.requestAd(
       placementId: placement.id,
       signals: signals,
+      visitorId: visitorId,
+      userAgent: <String, Object?>{
+        'deviceType': config.deviceType,
+        'os': config.os,
+      },
+      format: placement.format.name,
+      debugLogs: config.enableDebugLogs,
       cancelToken: cancelToken,
     );
   }
@@ -321,7 +362,14 @@ final class RahaAdsenseRuntime {
     RahaPlacement placement,
     RahaAdDecisionDto? decision,
   ) {
-    if (decision == null) return null;
+    if (decision == null) {
+      _debugLog('request_no_fill placementId=${placement.id}');
+      return null;
+    }
+    _debugLog(
+      'request_success placementId=${placement.id} hasAd=true '
+      'impressionUrl=${decision.impressionUrl}',
+    );
     final resolved = _resolveCommon(placement, decision);
     return switch (placement.format) {
       RahaInventoryPlacementFormat.banner => _buildBannerAdResponse(
@@ -507,16 +555,37 @@ final class RahaAdsenseRuntime {
   }
 
   Future<void> _recordImpression(RahaResolvedAd ad) async {
-    final result = await _api.trackImpression(
-      ad.impressionUri,
-      eventId: ad.impressionEventId,
+    _debugLog(
+      'impression_attempt placementId=${ad.info.placementId} '
+      'eventId=${ad.impressionEventId} url=${ad.impressionUri}',
     );
-    if (!result.isValid) {
-      throw RahaAdsException(
-        RahaAdsErrorCode.trackingRejected,
-        'Raha rejected the impression event.',
+    try {
+      final result = await _api.trackImpression(
+        ad.impressionUri,
+        eventId: ad.impressionEventId,
       );
+      if (!result.isValid) {
+        throw RahaAdsException(
+          RahaAdsErrorCode.trackingRejected,
+          'Raha rejected the impression event.',
+        );
+      }
+      _debugLog(
+        'impression_success placementId=${ad.info.placementId} '
+        'eventId=${ad.impressionEventId}',
+      );
+    } on Object catch (error) {
+      final status = error is RahaAdsException ? error.statusCode : null;
+      _debugLog(
+        'impression_failed placementId=${ad.info.placementId} '
+        'eventId=${ad.impressionEventId} status/error=${status ?? error}',
+      );
+      rethrow;
     }
+  }
+
+  void _debugLog(String message) {
+    if (config.enableDebugLogs) debugPrint('[RAHA_ADS] $message');
   }
 
   Future<void> _openClick(RahaResolvedAd ad) async {
