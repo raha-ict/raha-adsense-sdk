@@ -143,7 +143,7 @@ class _RahaVideoAdState extends State<RahaVideoAd> with WidgetsBindingObserver {
     _completed = false;
   }
 
-  Future<void> _load(RahaAdRequestLogContext requestContext) async {
+  Future<bool> _load(RahaAdRequestLogContext requestContext) async {
     _activeRequestContext = requestContext;
     _cancelToken.cancel();
     _cancelToken = CancelToken();
@@ -155,18 +155,18 @@ class _RahaVideoAdState extends State<RahaVideoAd> with WidgetsBindingObserver {
         cancelToken: _cancelToken,
         requestContext: requestContext,
       );
-      if (!mounted || _cancelToken.isCancelled) return;
+      if (!mounted || _cancelToken.isCancelled) return false;
       if (ad == null) {
         _disposeController();
         setState(() => _noFill = true);
-        return;
+        return false;
       }
 
       final controller = VideoPlayerController.networkUrl(ad.videoUrl);
       await controller.initialize();
       if (!mounted || _cancelToken.isCancelled) {
         await controller.dispose();
-        return;
+        return false;
       }
       controller
         ..setLooping(false)
@@ -190,10 +190,12 @@ class _RahaVideoAdState extends State<RahaVideoAd> with WidgetsBindingObserver {
       await controller.play();
       _logPlayingState(controller.value.isPlaying, ad.info.placementId);
       _evaluateViewability();
+      return true;
     } on Object catch (error) {
-      if (!mounted || _cancelToken.isCancelled) return;
+      if (!mounted || _cancelToken.isCancelled) return false;
       widget.onError?.call(_asRahaError(error));
       setState(() => _noFill = true);
+      return false;
     }
   }
 

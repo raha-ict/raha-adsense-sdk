@@ -141,7 +141,7 @@ void main() {
     debugPrint = originalDebugPrint;
   });
 
-  testWidgets('changed signals coalesce until this widget interval',
+  testWidgets('changed signals retry a no-fill widget immediately',
       (tester) async {
     backend.noFillPlacements.add('banner-placement');
     await tester.pumpWidget(
@@ -163,11 +163,6 @@ void main() {
         ),
       ),
     );
-    await tester.pump();
-    await tester.pump(const Duration(minutes: 29, seconds: 59));
-    expect(backend.adRequests, hasLength(1));
-
-    await tester.pump(const Duration(seconds: 1));
     await tester.pump();
     await _pumpUntil(tester, () => backend.adRequests.length == 2);
     expect(backend.adRequests.last.body['genre'], 'latest');
@@ -202,7 +197,6 @@ void main() {
 
   testWidgets('same-placement widget instances have independent intervals',
       (tester) async {
-    backend.noFillPlacements.add('banner-placement');
     final originalDebugPrint = debugPrint;
     final logs = <String>[];
     debugPrint = (message, {wrapWidth}) {
@@ -278,7 +272,7 @@ void main() {
     expect(backend.adRequests, hasLength(1));
   });
 
-  testWidgets('no-fill waits for the configured refresh interval',
+  testWidgets('no-fill does not retry until the next visibility transition',
       (tester) async {
     backend.noFillPlacements.add('banner-placement');
     final scrollController = ScrollController();
@@ -294,13 +288,68 @@ void main() {
     await tester.pump();
     expect(backend.adRequests, hasLength(1));
 
-    await tester.pump(const Duration(minutes: 29, seconds: 59));
+    await tester.pump(const Duration(minutes: 1));
     expect(backend.adRequests, hasLength(1));
-    await tester.pump(const Duration(seconds: 1));
+
+    scrollController.jumpTo(0);
+    await tester.pump();
+    scrollController.jumpTo(600);
     await tester.pump();
     await _pumpUntil(tester, () => backend.adRequests.length == 2);
     await tester.pumpWidget(const SizedBox.shrink());
     scrollController.dispose();
+  });
+
+  testWidgets('request failure has no cooldown and retries on visibility',
+      (tester) async {
+    backend.failingPlacements.add('banner-placement');
+    final originalDebugPrint = debugPrint;
+    final logs = <String>[];
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) logs.add(message);
+    };
+    final scrollController = ScrollController();
+    await tester.pumpWidget(
+      _scrollHost(
+        scrollController,
+        SizedBox(
+          width: 320,
+          height: 50,
+          child: const RahaBannerAd(size: RahaBannerSize.mobile320x50),
+        ),
+      ),
+    );
+    scrollController.jumpTo(600);
+    await tester.pump();
+    await _pumpUntil(
+      tester,
+      () => logs.any((line) => line.contains('event=request_failure')),
+    );
+    await tester.pump(const Duration(minutes: 1));
+    expect(
+      logs.where((line) => line.contains('event=request_start')),
+      hasLength(1),
+    );
+
+    scrollController.jumpTo(0);
+    await tester.pump();
+    scrollController.jumpTo(600);
+    await tester.pump();
+    await _pumpUntil(
+      tester,
+      () =>
+          logs.where((line) => line.contains('event=request_start')).length ==
+          2,
+    );
+    await _pumpUntil(
+      tester,
+      () =>
+          logs.where((line) => line.contains('event=request_failure')).length ==
+          2,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    scrollController.dispose();
+    debugPrint = originalDebugPrint;
   });
 
   testWidgets('refresh waits until interval and while placement is visible',
@@ -448,6 +497,7 @@ final class _FakeAdBackend implements HttpClientAdapter {
   final impressionRequests = <Uri>[];
   final clickRequests = <Uri>[];
   final noFillPlacements = <String>{};
+  final failingPlacements = <String>{};
   final impressionStatuses = <int>[];
 
   @override
@@ -470,6 +520,9 @@ final class _FakeAdBackend implements HttpClientAdapter {
       ));
       if (noFillPlacements.contains(placementId)) {
         return ResponseBody.fromString('', 204);
+      }
+      if (failingPlacements.contains(placementId)) {
+        return _json(500, const {'error': 'test failure'});
       }
       return _json(200, _decision(placementId));
     }

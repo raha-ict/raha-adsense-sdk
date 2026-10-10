@@ -16,7 +16,7 @@ final class VisibleAdRequestScheduler {
     required this.widgetInstanceId,
   });
 
-  final Future<void> Function(RahaAdRequestLogContext context) load;
+  final Future<bool> Function(RahaAdRequestLogContext context) load;
   final bool Function() canLoad;
   final Duration refreshInterval;
   final void Function(String message) onLog;
@@ -49,6 +49,8 @@ final class VisibleAdRequestScheduler {
       return;
     }
     if (!wasVisible) {
+      _pending = true;
+      if (!_hasRequested) _pendingTrigger = 'visibility';
       onLog(
         'event=visible placementId=${placementId()} '
         'visibleFraction=$visibleFraction',
@@ -107,21 +109,23 @@ final class VisibleAdRequestScheduler {
       widgetInstanceId: widgetInstanceId,
       visibleFraction: _visibleFraction,
     );
-    _hasRequested = true;
-    _lastRequestAt = clock.now();
     _pendingTrigger = 'interval';
     unawaited(_runLoad(context));
   }
 
   Future<void> _runLoad(RahaAdRequestLogContext context) async {
+    var loaded = false;
     try {
-      await load(context);
+      loaded = await load(context);
     } finally {
       _loading = false;
       if (!_disposed) {
-        // Keep a refresh pending if the request finishes while offscreen.
-        _pending = true;
-        if (_visible) _scheduleOrLoad();
+        if (loaded) {
+          _hasRequested = true;
+          _lastRequestAt = clock.now();
+          _pending = true;
+        }
+        if (_visible && _pending) _scheduleOrLoad();
       }
     }
   }

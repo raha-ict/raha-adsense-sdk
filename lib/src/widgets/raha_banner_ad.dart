@@ -128,7 +128,7 @@ class _RahaBannerAdState extends State<RahaBannerAd>
     super.dispose();
   }
 
-  Future<void> _load(RahaAdRequestLogContext requestContext) async {
+  Future<bool> _load(RahaAdRequestLogContext requestContext) async {
     _activeRequestContext = requestContext;
     _cancelToken.cancel();
     _cancelToken = CancelToken();
@@ -141,7 +141,7 @@ class _RahaBannerAdState extends State<RahaBannerAd>
         cancelToken: _cancelToken,
         requestContext: requestContext,
       );
-      if (!mounted || _cancelToken.isCancelled) return;
+      if (!mounted || _cancelToken.isCancelled) return false;
       _impressionTimer?.cancel();
       _impressionTimer = null;
       _imageDecoded = false;
@@ -151,10 +151,12 @@ class _RahaBannerAdState extends State<RahaBannerAd>
         _noFill = ad == null;
       });
       if (ad != null) widget.onLoaded?.call(ad.info);
+      return ad != null;
     } on Object catch (error) {
-      if (!mounted || _cancelToken.isCancelled) return;
+      if (!mounted || _cancelToken.isCancelled) return false;
       widget.onError?.call(_asRahaError(error));
       setState(() => _noFill = true);
+      return false;
     }
   }
 

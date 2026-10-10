@@ -127,7 +127,7 @@ class _RahaNativeAdState extends State<RahaNativeAd>
     _visibleFraction = 0;
   }
 
-  Future<void> _load(RahaAdRequestLogContext requestContext) async {
+  Future<bool> _load(RahaAdRequestLogContext requestContext) async {
     _activeRequestContext = requestContext;
     _cancelToken.cancel();
     _cancelToken = CancelToken();
@@ -139,7 +139,7 @@ class _RahaNativeAdState extends State<RahaNativeAd>
         cancelToken: _cancelToken,
         requestContext: requestContext,
       );
-      if (!mounted || _cancelToken.isCancelled) return;
+      if (!mounted || _cancelToken.isCancelled) return false;
       _impressionTimer?.cancel();
       _impressionTimer = null;
       _impressionRecorded = false;
@@ -150,10 +150,12 @@ class _RahaNativeAdState extends State<RahaNativeAd>
       });
       if (ad != null) widget.onLoaded?.call(ad.info);
       _evaluateViewability();
+      return ad != null;
     } on Object catch (error) {
-      if (!mounted || _cancelToken.isCancelled) return;
+      if (!mounted || _cancelToken.isCancelled) return false;
       widget.onError?.call(_asRahaError(error));
       setState(() => _noFill = true);
+      return false;
     }
   }
 
