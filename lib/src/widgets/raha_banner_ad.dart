@@ -91,7 +91,6 @@ class _RahaBannerAdState extends State<RahaBannerAd>
     _requestScheduler = VisibleAdRequestScheduler(
       load: _load,
       canLoad: () => RahaAdsense.isReady,
-      refreshInterval: _refreshInterval,
       onLog: _debugLog,
       placementId: _placementId,
       widgetInstanceId: _widgetInstanceId,
@@ -306,10 +305,6 @@ class _RahaBannerAdState extends State<RahaBannerAd>
   String _placementId() => RahaAdsense.isReady
       ? RahaAdsense.runtime.automaticBannerPlacementId(widget.size)
       : 'banner:${widget.size.wireValue}';
-
-  Duration get _refreshInterval => RahaAdsense.isReady
-      ? RahaAdsense.runtime.config.adRefreshInterval
-      : const Duration(minutes: 30);
 
   void _debugLog(String message) {
     if (RahaAdsense.isReady && RahaAdsense.runtime.config.enableDebugLogs) {

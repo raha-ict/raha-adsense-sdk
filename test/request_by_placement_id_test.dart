@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:raha_adsense/src/config/raha_adsense_config.dart';
 import 'package:raha_adsense/src/config/raha_adsense_endpoints.dart';
 import 'package:raha_adsense/src/core/raha_adsense_runtime.dart';
@@ -15,7 +14,6 @@ void main() {
   late _TestAdServer server;
 
   setUp(() async {
-    SharedPreferences.setMockInitialValues({});
     server = await _TestAdServer.start();
   });
 
@@ -104,7 +102,7 @@ void main() {
     expect(combined, contains('"genre":"news"'));
     expect(combined,
         contains('"userAgent":{"deviceType":"phone","os":"android"}'));
-    expect(combined, isNot(contains('"visitorId"')));
+    expect(combined, contains('"visitorId":"<redacted>"'));
     expect(combined, contains('event=request_response'));
     expect(combined, contains('status=200'));
     expect(combined, contains('requestHeaders='));
@@ -117,7 +115,8 @@ void main() {
     expect(combined, isNot(contains('impressionUrl=')));
   });
 
-  test('sends userAgent and targeting signals without visitorId', () async {
+  test('sends configured visitorId, userAgent, and targeting signals',
+      () async {
     final runtime = await _runtime(server);
     addTearDown(runtime.dispose);
 
@@ -127,33 +126,13 @@ void main() {
     );
 
     final body = server.requestBodies.single;
-    expect(body.containsKey('visitorId'), isFalse);
+    expect(body['visitorId'], 'stable-test-visitor-id');
     expect(body['userAgent'], {'deviceType': 'phone', 'os': 'android'});
     expect(body['genre'], 'news');
     expect(body['screen'], 'home');
     expect(body['device_type'], 'phone');
     expect(body['os'], 'ANDROID');
     expect(body.containsKey('signals'), isFalse);
-  });
-
-  test('does not send visitorId across runtime instances while disabled',
-      () async {
-    final firstRuntime = await _runtime(server, usePersistedVisitorId: true);
-    await firstRuntime.requestAdByPlacementId(
-      placementId: 'banner-placement',
-      signals: const {},
-    );
-    expect(server.requestBodies.last.containsKey('visitorId'), isFalse);
-    firstRuntime.dispose();
-
-    final secondRuntime = await _runtime(server, usePersistedVisitorId: true);
-    addTearDown(secondRuntime.dispose);
-    await secondRuntime.requestAdByPlacementId(
-      placementId: 'banner-placement',
-      signals: const {},
-    );
-
-    expect(server.requestBodies.last.containsKey('visitorId'), isFalse);
   });
 
   test('video click tracking is untouched until openClick is called', () async {
@@ -273,7 +252,6 @@ void main() {
 
 Future<RahaAdsenseRuntime> _runtime(
   _TestAdServer server, {
-  bool usePersistedVisitorId = false,
   bool enableDebugLogs = false,
 }) async {
   final runtime = RahaAdsenseRuntime(
@@ -289,8 +267,7 @@ Future<RahaAdsenseRuntime> _runtime(
       clickOpener: (uri, _) async {},
       enableDebugLogs: enableDebugLogs,
     ),
-    visitorIdLoader:
-        usePersistedVisitorId ? null : () async => 'stable-test-visitor-id',
+    visitorId: 'stable-test-visitor-id',
   );
   await runtime.initialize();
   return runtime;

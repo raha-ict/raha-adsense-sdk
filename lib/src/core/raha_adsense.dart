@@ -17,28 +17,25 @@ abstract final class RahaAdsense {
   static bool get isReady => _runtime != null;
 
   /// Initialize the Raha SDK with the provided [appId].
+  /// The publisher supplies a stable [visitorId] for backend frequency capping.
   ///
   /// The [appId] is the Raha application identifier used to fetch inventory
   /// and placement metadata. Optionally pass [clickOpener] to handle ad click
   /// navigation in a custom shell.
   static Future<void> setup({
     required String appId,
+    required String visitorId,
     required String deviceType,
     required String os,
     RahaClickOpener? clickOpener,
-    Duration adRefreshInterval = const Duration(minutes: 30),
     bool? enableDebugLogs,
     RahaAdsenseEnvironment environment = RahaAdsenseEnvironment.production,
   }) async {
     if (_runtime != null) {
       throw StateError('RahaAdsense.setup() may be called only once.');
     }
-    if (adRefreshInterval <= Duration.zero) {
-      throw ArgumentError.value(
-        adRefreshInterval,
-        'adRefreshInterval',
-        'Must be greater than zero.',
-      );
+    if (visitorId.trim().isEmpty) {
+      throw ArgumentError.value(visitorId, 'visitorId', 'Must not be empty.');
     }
     final runtime = RahaAdsenseRuntime(
       config: RahaAdsenseConfig.production(
@@ -46,10 +43,10 @@ abstract final class RahaAdsense {
         deviceType: deviceType,
         os: os,
         clickOpener: clickOpener,
-        adRefreshInterval: adRefreshInterval,
         enableDebugLogs: enableDebugLogs,
         environment: environment,
       ),
+      visitorId: visitorId,
     );
     try {
       await runtime.initialize();

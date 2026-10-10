@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:crypto/crypto.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
@@ -23,19 +22,17 @@ import 'placement_registry.dart';
 final class RahaAdsenseRuntime {
   RahaAdsenseRuntime({
     required this.config,
+    required this.visitorId,
     RahaAdsenseApi? api,
     RahaUrlResolver? resolver,
-    Future<String> Function()? visitorIdLoader,
   })  : _api = api ?? RahaAdsenseApi(dio: buildRahaDio(config)),
-        _resolver = resolver ?? RahaUrlResolver(config.endpoints),
-        _visitorIdLoader = visitorIdLoader;
+        _resolver = resolver ?? RahaUrlResolver(config.endpoints);
 
   final RahaAdsenseConfig config;
+  final String visitorId;
   final RahaAdsenseApi _api;
   final RahaUrlResolver _resolver;
-  final Future<String> Function()? _visitorIdLoader;
   final Uuid _uuid = const Uuid();
-  String? _visitorId;
 
   PlacementRegistry? _registry;
   DateTime? _inventoryLoadedAt;
@@ -47,16 +44,7 @@ final class RahaAdsenseRuntime {
   /// This method is called once during initial SDK setup.
   Future<void> initialize({CancelToken? cancelToken}) async {
     _validateAppId(config.appId);
-    _visitorId = await (_visitorIdLoader?.call() ?? _loadVisitorId());
     await _getRegistry(cancelToken: cancelToken, forceRefresh: true);
-  }
-
-  String get visitorId {
-    final value = _visitorId;
-    if (value == null) {
-      throw StateError('RahaAdsenseRuntime.initialize() has not completed.');
-    }
-    return value;
   }
 
   String get visitorIdLogFingerprint =>
@@ -69,19 +57,6 @@ final class RahaAdsenseRuntime {
       _registry?.resolveNative().id ?? 'native';
 
   String automaticVideoPlacementId() => _registry?.resolveVideo().id ?? 'video';
-
-  Future<String> _loadVisitorId() async {
-    final preferences = await SharedPreferences.getInstance();
-    final key = 'raha_adsense_visitor_id_${config.appId.toLowerCase()}';
-    final existing = preferences.getString(key)?.trim();
-    if (existing != null && existing.isNotEmpty) return existing;
-    final created = _uuid.v4();
-    final stored = await preferences.setString(key, created);
-    if (!stored) {
-      throw StateError('Could not persist the Raha visitor ID.');
-    }
-    return created;
-  }
 
   /// Request a banner ad decision and convert it into a response object.
   Future<RahaBannerAdResponse?> requestBannerAd({

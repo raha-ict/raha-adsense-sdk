@@ -86,7 +86,6 @@ class _RahaVideoAdState extends State<RahaVideoAd> with WidgetsBindingObserver {
     _requestScheduler = VisibleAdRequestScheduler(
       load: _load,
       canLoad: () => RahaAdsense.isReady,
-      refreshInterval: _refreshInterval,
       onLog: _debugLog,
       placementId: _placementId,
       widgetInstanceId: _widgetInstanceId,
@@ -369,10 +368,6 @@ class _RahaVideoAdState extends State<RahaVideoAd> with WidgetsBindingObserver {
   String _placementId() => RahaAdsense.isReady
       ? RahaAdsense.runtime.automaticVideoPlacementId()
       : 'video';
-
-  Duration get _refreshInterval => RahaAdsense.isReady
-      ? RahaAdsense.runtime.config.adRefreshInterval
-      : const Duration(minutes: 30);
 
   void _debugLog(String message) {
     if (RahaAdsense.isReady && RahaAdsense.runtime.config.enableDebugLogs) {

@@ -79,7 +79,6 @@ class _RahaNativeAdState extends State<RahaNativeAd>
     _requestScheduler = VisibleAdRequestScheduler(
       load: _load,
       canLoad: () => RahaAdsense.isReady,
-      refreshInterval: _refreshInterval,
       onLog: _debugLog,
       placementId: _placementId,
       widgetInstanceId: _widgetInstanceId,
@@ -227,10 +226,6 @@ class _RahaNativeAdState extends State<RahaNativeAd>
   String _placementId() => RahaAdsense.isReady
       ? RahaAdsense.runtime.automaticNativePlacementId()
       : 'native';
-
-  Duration get _refreshInterval => RahaAdsense.isReady
-      ? RahaAdsense.runtime.config.adRefreshInterval
-      : const Duration(minutes: 30);
 
   void _debugLog(String message) {
     if (RahaAdsense.isReady && RahaAdsense.runtime.config.enableDebugLogs) {

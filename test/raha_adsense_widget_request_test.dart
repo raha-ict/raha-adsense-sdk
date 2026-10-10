@@ -35,14 +35,13 @@ void main() {
       ),
       deviceType: 'phone',
       os: 'android',
-      adRefreshInterval: const Duration(minutes: 30),
       enableDebugLogs: true,
     );
     final dio = buildRahaDio(config)..httpClientAdapter = backend;
     final runtime = RahaAdsenseRuntime(
       config: config,
+      visitorId: 'visitor-test-1',
       api: RahaAdsenseApi(dio: dio),
-      visitorIdLoader: () async => 'visitor-test-1',
     );
     await runtime.initialize();
     RahaAdsense.setRuntimeForTesting(runtime);
@@ -103,7 +102,7 @@ void main() {
     scrollController.dispose();
   });
 
-  testWidgets('manual adRequest bypasses automatic cooldown', (tester) async {
+  testWidgets('manual adRequest can run repeatedly', (tester) async {
     backend.noFillPlacements.add('banner-placement');
     final originalDebugPrint = debugPrint;
     final logs = <String>[];
@@ -195,7 +194,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('same-placement widget instances have independent intervals',
+  testWidgets('same-placement widgets each request once without cooldown',
       (tester) async {
     final originalDebugPrint = debugPrint;
     final logs = <String>[];
@@ -225,28 +224,14 @@ void main() {
         .toSet();
     expect(startEvents, hasLength(2));
     expect(instanceIds, hasLength(2));
-    expect(
-      logs.where((line) =>
-          line.contains('reason=interval_not_reached') &&
-          line.contains('requestSource=auto_refresh')),
-      hasLength(2),
-    );
-
-    await tester.pump(const Duration(minutes: 29, seconds: 59));
+    expect(logs.join('\n'), isNot(contains('reason=interval_not_reached')));
+    await tester.pump(const Duration(minutes: 31));
     expect(backend.adRequests, hasLength(2));
-    await tester.pump(const Duration(seconds: 1));
-    await _pumpUntil(tester, () => backend.adRequests.length == 4);
-    expect(
-      logs.where((line) =>
-          line.contains('requestSource=auto_refresh') &&
-          line.contains('event=request_start')),
-      hasLength(2),
-    );
     await tester.pumpWidget(const SizedBox.shrink());
     debugPrint = originalDebugPrint;
   });
 
-  testWidgets('disposing an automatic widget cancels its refresh timer',
+  testWidgets('disposing an automatic widget prevents further requests',
       (tester) async {
     backend.noFillPlacements.add('banner-placement');
     await tester.pumpWidget(
@@ -300,7 +285,7 @@ void main() {
     scrollController.dispose();
   });
 
-  testWidgets('request failure has no cooldown and retries on visibility',
+  testWidgets('request failure retries on a later visibility transition',
       (tester) async {
     backend.failingPlacements.add('banner-placement');
     final originalDebugPrint = debugPrint;
@@ -352,31 +337,16 @@ void main() {
     debugPrint = originalDebugPrint;
   });
 
-  testWidgets('refresh waits until interval and while placement is visible',
+  testWidgets('successful widget request does not automatically refresh',
       (tester) async {
-    backend.noFillPlacements.add('banner-placement');
-    final scrollController = ScrollController();
     await tester.pumpWidget(
-      _scrollHost(
-        scrollController,
-        const RahaBannerAd(size: RahaBannerSize.mobile320x50),
-      ),
+      _visibleHost(const RahaBannerAd(size: RahaBannerSize.mobile320x50)),
     );
-    scrollController.jumpTo(600);
-    await tester.pump();
     await _pumpUntil(tester, () => backend.adRequests.length == 1);
     await tester.pump();
-
-    scrollController.jumpTo(0);
-    await tester.pump();
-    await tester.pump(const Duration(minutes: 30));
+    await tester.pump(const Duration(minutes: 31));
     expect(backend.adRequests, hasLength(1));
-
-    scrollController.jumpTo(600);
-    await tester.pump();
-    await _pumpUntil(tester, () => backend.adRequests.length == 2);
     await tester.pumpWidget(const SizedBox.shrink());
-    scrollController.dispose();
   });
 
   testWidgets('video impression fires once after visible playback',

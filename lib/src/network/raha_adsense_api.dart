@@ -79,10 +79,8 @@ final class RahaAdsenseApi {
     CancelToken? cancelToken,
   }) async {
     final normalizedSignals = validateAndNormalizePublisherSignals(signals);
-    // Temporarily omit visitorId to check whether it affects ad eligibility.
-    // Restore this field after the diagnostic:
-    // 'visitorId': visitorId,
     final body = <String, Object?>{
+      'visitorId': visitorId,
       'userAgent': userAgent,
       ...normalizedSignals,
     };

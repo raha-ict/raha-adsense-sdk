@@ -12,7 +12,6 @@ final class RahaAdsenseConfig {
     required this.deviceType,
     required this.os,
     this.clickOpener,
-    this.adRefreshInterval = const Duration(minutes: 30),
     bool? enableDebugLogs,
     RahaAdsenseEnvironment environment = RahaAdsenseEnvironment.production,
   })  : endpoints = switch (environment) {
@@ -31,7 +30,6 @@ final class RahaAdsenseConfig {
     this.deviceType = 'unknown',
     this.os = 'unknown',
     this.clickOpener,
-    this.adRefreshInterval = const Duration(minutes: 30),
     this.enableDebugLogs = false,
     this.requestTimeout = const Duration(seconds: 9),
     this.inventoryTtl = const Duration(minutes: 5),
@@ -41,7 +39,6 @@ final class RahaAdsenseConfig {
   final String deviceType;
   final String os;
   final RahaClickOpener? clickOpener;
-  final Duration adRefreshInterval;
   final RahaAdsenseEndpoints endpoints;
   final bool enableDebugLogs;
   final Duration requestTimeout;
