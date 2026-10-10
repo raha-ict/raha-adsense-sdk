@@ -23,9 +23,8 @@ final class VisibleAdRequestScheduler {
   bool _pending = true;
   bool _loading = false;
   bool _disposed = false;
-  bool _hasRequested = false;
+  bool _requestStarted = false;
   double _visibleFraction = 0;
-  String _pendingTrigger = 'visibility';
   static const Uuid _uuid = Uuid();
 
   void updateVisibility(double visibleFraction) {
@@ -37,8 +36,7 @@ final class VisibleAdRequestScheduler {
       return;
     }
     if (!wasVisible) {
-      _pending = true;
-      if (!_hasRequested) _pendingTrigger = 'visibility';
+      if (!_requestStarted) _pending = true;
       onLog(
         'event=visible placementId=${placementId()} '
         'visibleFraction=$visibleFraction',
@@ -47,54 +45,40 @@ final class VisibleAdRequestScheduler {
     _scheduleOrLoad();
   }
 
-  void requestRefresh() {
-    if (_disposed) return;
-    _pending = true;
-    _pendingTrigger = 'changed_inputs';
-    if (!_visible) {
-      onLog('event=refresh_skip placementId=${placementId()} '
-          'reason=not_visible');
-      return;
-    }
-    _scheduleOrLoad();
-  }
-
   void _scheduleOrLoad() {
-    if (_disposed || !_visible || _loading || !_pending || !canLoad()) return;
-    if (_hasRequested) {
-      onLog('event=refresh_allowed placementId=${placementId()} '
-          'requestSource=auto_refresh reason=inputs_changed');
+    if (_disposed ||
+        _requestStarted ||
+        !_visible ||
+        _loading ||
+        !_pending ||
+        !canLoad()) {
+      return;
     }
     _startLoad();
   }
 
   void _startLoad() {
-    if (_disposed || !_visible || _loading || !_pending) return;
+    if (_disposed || _requestStarted || !_visible || _loading || !_pending) {
+      return;
+    }
     _pending = false;
+    _requestStarted = true;
     _loading = true;
     final context = RahaAdRequestLogContext(
       requestId: _uuid.v4(),
-      requestSource: _hasRequested ? 'auto_refresh' : 'auto_initial_visible',
-      trigger: _pendingTrigger,
+      requestSource: 'auto_initial_visible',
+      trigger: 'visibility',
       widgetInstanceId: widgetInstanceId,
       visibleFraction: _visibleFraction,
     );
-    _pendingTrigger = 'visibility';
     unawaited(_runLoad(context));
   }
 
   Future<void> _runLoad(RahaAdRequestLogContext context) async {
-    var loaded = false;
     try {
-      loaded = await load(context);
+      await load(context);
     } finally {
       _loading = false;
-      if (!_disposed) {
-        if (loaded) {
-          _hasRequested = true;
-        }
-        if (_visible && _pending) _scheduleOrLoad();
-      }
     }
   }
 

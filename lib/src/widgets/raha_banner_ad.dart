@@ -98,17 +98,6 @@ class _RahaBannerAdState extends State<RahaBannerAd>
   }
 
   @override
-  void didUpdateWidget(covariant RahaBannerAd oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.size != widget.size ||
-        !samePublisherSignals(oldWidget.signals, widget.signals) ||
-        oldWidget.language != widget.language ||
-        oldWidget.differenceTime != widget.differenceTime) {
-      _requestScheduler.requestRefresh();
-    }
-  }
-
-  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _foreground = state == AppLifecycleState.resumed;
     _requestScheduler.updateVisibility(

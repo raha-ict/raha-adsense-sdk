@@ -93,16 +93,6 @@ class _RahaVideoAdState extends State<RahaVideoAd> with WidgetsBindingObserver {
   }
 
   @override
-  void didUpdateWidget(covariant RahaVideoAd oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!samePublisherSignals(oldWidget.signals, widget.signals) ||
-        oldWidget.language != widget.language ||
-        oldWidget.differenceTime != widget.differenceTime) {
-      _requestScheduler.requestRefresh();
-    }
-  }
-
-  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _foreground = state == AppLifecycleState.resumed;
     if (!_foreground) {
