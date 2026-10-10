@@ -36,7 +36,7 @@ void main() {
       deviceType: 'phone',
       os: 'android',
       adRefreshInterval: const Duration(minutes: 30),
-      enableDebugLogs: false,
+      enableDebugLogs: true,
     );
     final dio = buildRahaDio(config)..httpClientAdapter = backend;
     final runtime = RahaAdsenseRuntime(
@@ -103,7 +103,45 @@ void main() {
     scrollController.dispose();
   });
 
-  testWidgets('changed signals coalesce until the shared interval',
+  testWidgets('manual adRequest bypasses automatic cooldown', (tester) async {
+    backend.noFillPlacements.add('banner-placement');
+    final originalDebugPrint = debugPrint;
+    final logs = <String>[];
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) logs.add(message);
+    };
+    addTearDown(() => debugPrint = originalDebugPrint);
+
+    var firstDone = false;
+    final firstRequest = RahaAdsense.adRequest(
+      type: RahaAdFormat.banner,
+      bannerSize: RahaBannerSize.mobile320x50,
+    );
+    firstRequest.then((_) => firstDone = true);
+    await _pumpUntil(tester, () => firstDone);
+    await firstRequest;
+
+    var secondDone = false;
+    final secondRequest = RahaAdsense.adRequest(
+      type: RahaAdFormat.banner,
+      bannerSize: RahaBannerSize.mobile320x50,
+    );
+    secondRequest.then((_) => secondDone = true);
+    await _pumpUntil(tester, () => secondDone);
+    await secondRequest;
+
+    expect(backend.adRequests, hasLength(2));
+    expect(
+      logs.where((line) =>
+          line.contains('event=request_start') &&
+          line.contains('requestSource=manual_adRequest')),
+      hasLength(2),
+    );
+    expect(logs.join('\n'), isNot(contains('reason=interval_not_reached')));
+    debugPrint = originalDebugPrint;
+  });
+
+  testWidgets('changed signals coalesce until this widget interval',
       (tester) async {
     backend.noFillPlacements.add('banner-placement');
     await tester.pumpWidget(
@@ -136,7 +174,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('automatic cooldown survives widget remounts', (tester) async {
+  testWidgets('remount gets a fresh initial request', (tester) async {
     backend.noFillPlacements.add('banner-placement');
     await tester.pumpWidget(
       _visibleHost(
@@ -158,17 +196,19 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(backend.adRequests, hasLength(1));
-
-    await tester.pump(const Duration(minutes: 30));
-    await tester.pump();
     await _pumpUntil(tester, () => backend.adRequests.length == 2);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('only one visible same-placement widget requests per interval',
+  testWidgets('same-placement widget instances have independent intervals',
       (tester) async {
     backend.noFillPlacements.add('banner-placement');
+    final originalDebugPrint = debugPrint;
+    final logs = <String>[];
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) logs.add(message);
+    };
+    addTearDown(() => debugPrint = originalDebugPrint);
     await tester.pumpWidget(
       MaterialApp(
         home: Column(
@@ -179,11 +219,37 @@ void main() {
         ),
       ),
     );
-    await _pumpUntil(tester, () => backend.adRequests.length == 1);
+    await _pumpUntil(tester, () => backend.adRequests.length == 2);
     await tester.pump();
+    final startEvents = logs.where((line) =>
+        line.contains('event=request_start') &&
+        line.contains('requestSource=auto_initial_visible'));
+    final instanceIds = startEvents
+        .map((line) =>
+            RegExp(r'widgetInstanceId=(w\d+)').firstMatch(line)?.group(1))
+        .whereType<String>()
+        .toSet();
+    expect(startEvents, hasLength(2));
+    expect(instanceIds, hasLength(2));
+    expect(
+      logs.where((line) =>
+          line.contains('reason=interval_not_reached') &&
+          line.contains('requestSource=auto_refresh')),
+      hasLength(2),
+    );
+
+    await tester.pump(const Duration(minutes: 29, seconds: 59));
+    expect(backend.adRequests, hasLength(2));
     await tester.pump(const Duration(seconds: 1));
-    expect(backend.adRequests, hasLength(1));
+    await _pumpUntil(tester, () => backend.adRequests.length == 4);
+    expect(
+      logs.where((line) =>
+          line.contains('requestSource=auto_refresh') &&
+          line.contains('event=request_start')),
+      hasLength(2),
+    );
     await tester.pumpWidget(const SizedBox.shrink());
+    debugPrint = originalDebugPrint;
   });
 
   testWidgets('disposing an automatic widget cancels its refresh timer',

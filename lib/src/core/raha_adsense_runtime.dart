@@ -8,7 +8,6 @@ import 'package:uuid/uuid.dart';
 
 import 'raha_ads_debug_log.dart';
 import 'ad_request_log_context.dart';
-import 'automatic_ad_request_coordinator.dart';
 import '../config/raha_adsense_config.dart';
 import '../errors/raha_adsense_exception.dart';
 import '../models/ad_response.dart';
@@ -36,8 +35,6 @@ final class RahaAdsenseRuntime {
   final RahaUrlResolver _resolver;
   final Future<String> Function()? _visitorIdLoader;
   final Uuid _uuid = const Uuid();
-  final AutomaticAdRequestCoordinator _automaticRequestCoordinator =
-      AutomaticAdRequestCoordinator();
   String? _visitorId;
 
   PlacementRegistry? _registry;
@@ -72,12 +69,6 @@ final class RahaAdsenseRuntime {
       _registry?.resolveNative().id ?? 'native';
 
   String automaticVideoPlacementId() => _registry?.resolveVideo().id ?? 'video';
-
-  Duration? tryAcquireAutomaticRequest(String placementId) =>
-      _automaticRequestCoordinator.tryAcquire(
-        placementId,
-        config.adRefreshInterval,
-      );
 
   Future<String> _loadVisitorId() async {
     final preferences = await SharedPreferences.getInstance();

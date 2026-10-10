@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:clock/clock.dart';
 import 'package:uuid/uuid.dart';
 
 import '../core/ad_request_log_context.dart';
@@ -8,14 +9,16 @@ import '../core/ad_request_log_context.dart';
 final class VisibleAdRequestScheduler {
   VisibleAdRequestScheduler({
     required this.load,
-    required this.tryAcquireRequestSlot,
+    required this.canLoad,
+    required this.refreshInterval,
     required this.onLog,
     required this.placementId,
     required this.widgetInstanceId,
   });
 
   final Future<void> Function(RahaAdRequestLogContext context) load;
-  final Duration? Function() tryAcquireRequestSlot;
+  final bool Function() canLoad;
+  final Duration refreshInterval;
   final void Function(String message) onLog;
   final String Function() placementId;
   final String widgetInstanceId;
@@ -26,7 +29,7 @@ final class VisibleAdRequestScheduler {
   bool _loading = false;
   bool _disposed = false;
   bool _hasRequested = false;
-  bool _waitedForRequestSlot = false;
+  DateTime? _lastRequestAt;
   double _visibleFraction = 0;
   String _pendingTrigger = 'visibility';
   static const Uuid _uuid = Uuid();
@@ -67,24 +70,28 @@ final class VisibleAdRequestScheduler {
   }
 
   void _scheduleOrLoad() {
-    if (_disposed || !_visible || _loading || !_pending) return;
-    final remaining = tryAcquireRequestSlot();
-    if (remaining != null) {
-      _waitedForRequestSlot = true;
-      onLog(
-        'event=refresh_skip placementId=${placementId()} '
-        'reason=interval_not_reached '
-        'remainingMs=${remaining.inMilliseconds}',
-      );
-      _timer?.cancel();
-      _timer = Timer(remaining.isNegative ? Duration.zero : remaining, () {
-        _timer = null;
-        if (_visible && !_disposed && _pending) _scheduleOrLoad();
-      });
-      return;
+    if (_disposed || !_visible || _loading || !_pending || !canLoad()) return;
+    final lastRequestAt = _lastRequestAt;
+    if (lastRequestAt != null) {
+      final elapsed = clock.now().difference(lastRequestAt);
+      final remaining = refreshInterval - elapsed;
+      if (!remaining.isNegative && remaining > Duration.zero) {
+        onLog(
+          'event=refresh_skip placementId=${placementId()} '
+          'reason=interval_not_reached requestSource=auto_refresh '
+          'remainingMs=${remaining.inMilliseconds}',
+        );
+        _timer?.cancel();
+        _timer = Timer(remaining, () {
+          _timer = null;
+          if (_visible && !_disposed && _pending) _scheduleOrLoad();
+        });
+        return;
+      }
     }
-    if (_hasRequested || _waitedForRequestSlot) {
-      onLog('event=refresh_allowed placementId=${placementId()}');
+    if (_hasRequested) {
+      onLog('event=refresh_allowed placementId=${placementId()} '
+          'requestSource=auto_refresh');
     }
     _startLoad();
   }
@@ -95,13 +102,13 @@ final class VisibleAdRequestScheduler {
     _loading = true;
     final context = RahaAdRequestLogContext(
       requestId: _uuid.v4(),
-      requestSource: _hasRequested ? 'auto_refresh' : 'auto_visible',
+      requestSource: _hasRequested ? 'auto_refresh' : 'auto_initial_visible',
       trigger: _pendingTrigger,
       widgetInstanceId: widgetInstanceId,
       visibleFraction: _visibleFraction,
     );
     _hasRequested = true;
-    _waitedForRequestSlot = false;
+    _lastRequestAt = clock.now();
     _pendingTrigger = 'interval';
     unawaited(_runLoad(context));
   }

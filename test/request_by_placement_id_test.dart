@@ -43,8 +43,14 @@ void main() {
   });
 
   test('explicit placement requests remain caller-controlled', () async {
-    final runtime = await _runtime(server);
+    final runtime = await _runtime(server, enableDebugLogs: true);
     addTearDown(runtime.dispose);
+    final originalDebugPrint = debugPrint;
+    final logs = <String>[];
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) logs.add(message);
+    };
+    addTearDown(() => debugPrint = originalDebugPrint);
 
     await runtime.requestAdByPlacementId(
       placementId: 'banner-placement',
@@ -59,6 +65,13 @@ void main() {
       'banner-placement',
       'banner-placement',
     ]);
+    expect(
+      logs.where((line) =>
+          line.contains('event=request_start') &&
+          line.contains('requestSource=manual_requestByPlacementId')),
+      hasLength(2),
+    );
+    expect(logs.join('\n'), isNot(contains('reason=interval_not_reached')));
   });
 
   test('structured request and tracking logs redact IDs and URLs', () async {

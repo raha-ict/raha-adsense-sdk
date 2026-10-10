@@ -87,10 +87,11 @@ class _RahaBannerAdState extends State<RahaBannerAd>
     WidgetsBinding.instance.addObserver(this);
     _cancelToken = CancelToken();
     _widgetInstanceId = nextRahaWidgetInstanceId();
-    _debugLog('event=widget_mount');
+    _debugLog('event=widget_mount placementId=${_placementId()}');
     _requestScheduler = VisibleAdRequestScheduler(
       load: _load,
-      tryAcquireRequestSlot: _tryAcquireRequestSlot,
+      canLoad: () => RahaAdsense.isReady,
+      refreshInterval: _refreshInterval,
       onLog: _debugLog,
       placementId: _placementId,
       widgetInstanceId: _widgetInstanceId,
@@ -304,20 +305,20 @@ class _RahaBannerAdState extends State<RahaBannerAd>
       ? RahaAdsense.runtime.automaticBannerPlacementId(widget.size)
       : 'banner:${widget.size.wireValue}';
 
-  Duration? _tryAcquireRequestSlot() {
-    if (!RahaAdsense.isReady) return const Duration(minutes: 30);
-    return RahaAdsense.runtime.tryAcquireAutomaticRequest(_placementId());
-  }
+  Duration get _refreshInterval => RahaAdsense.isReady
+      ? RahaAdsense.runtime.config.adRefreshInterval
+      : const Duration(minutes: 30);
 
   void _debugLog(String message) {
     if (RahaAdsense.isReady && RahaAdsense.runtime.config.enableDebugLogs) {
       final requestContext = _activeRequestContext;
+      final hasLoggedSource = message.contains('requestSource=');
       rahaAdsDebugLog(
         '$message format=banner visitorIdHash='
         '${RahaAdsense.runtime.visitorIdLogFingerprint} '
         'widgetInstanceId=$_widgetInstanceId '
         'requestId=${requestContext?.requestId ?? 'none'} '
-        'requestSource=${requestContext?.requestSource ?? 'widget_lifecycle'} '
+        '${hasLoggedSource ? '' : 'requestSource=${requestContext?.requestSource ?? 'widget_lifecycle'} '}'
         'trigger=${requestContext?.trigger ?? 'state'} '
         'visibleFraction=$_visibleFraction',
       );
