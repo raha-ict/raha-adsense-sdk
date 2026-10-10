@@ -97,12 +97,13 @@ void main() {
     expect(combined, contains('event=request_start'));
     expect(combined, contains('requestSource=manual_requestByPlacementId'));
     expect(combined, contains('event=request_body'));
-    expect(combined, contains('bodyKeys='));
+    expect(combined, contains('bodyKeys= '));
     expect(combined, contains('/api/v1/ad-requests/request/banner-placement'));
     expect(combined, contains('method=POST'));
     expect(combined, contains('headers={"Accept":"application/json"'));
-    expect(combined, contains('"genre":"news"'));
-    expect(combined, contains('"visitorId":"<redacted>"'));
+    expect(combined, contains('body={}'));
+    expect(combined, isNot(contains('"genre":"news"')));
+    expect(combined, isNot(contains('"visitorId"')));
     expect(combined, contains('event=request_response'));
     expect(combined, contains('status=200'));
     expect(combined, contains('requestHeaders='));
@@ -115,8 +116,7 @@ void main() {
     expect(combined, isNot(contains('impressionUrl=')));
   });
 
-  test('serializes exact visitorId and userAgent with flat contextual signals',
-      () async {
+  test('sends an empty request body while signals are disabled', () async {
     final runtime = await _runtime(server);
     addTearDown(runtime.dispose);
 
@@ -126,23 +126,22 @@ void main() {
     );
 
     final body = server.requestBodies.single;
-    expect(body['visitorId'], 'stable-test-visitor-id');
-    expect(body.containsKey('visitor_id'), isFalse);
-    expect(body['userAgent'], {'deviceType': 'phone', 'os': 'android'});
-    expect(body['genre'], 'news');
-    expect(body['screen'], 'home');
-    expect(body['device_type'], 'phone');
-    expect(body['os'], 'ANDROID');
+    expect(body, isEmpty);
+    expect(body.containsKey('visitorId'), isFalse);
+    expect(body.containsKey('userAgent'), isFalse);
+    expect(body.containsKey('genre'), isFalse);
+    expect(body.containsKey('device_type'), isFalse);
     expect(body.containsKey('signals'), isFalse);
   });
 
-  test('persists the same visitorId across runtime instances', () async {
+  test('does not send visitorId across runtime instances while disabled',
+      () async {
     final firstRuntime = await _runtime(server, usePersistedVisitorId: true);
     await firstRuntime.requestAdByPlacementId(
       placementId: 'banner-placement',
       signals: const {},
     );
-    final firstVisitorId = server.requestBodies.last['visitorId'];
+    expect(server.requestBodies.last.containsKey('visitorId'), isFalse);
     firstRuntime.dispose();
 
     final secondRuntime = await _runtime(server, usePersistedVisitorId: true);
@@ -152,8 +151,7 @@ void main() {
       signals: const {},
     );
 
-    expect(server.requestBodies.last['visitorId'], firstVisitorId);
-    expect(firstVisitorId, isA<String>());
+    expect(server.requestBodies.last.containsKey('visitorId'), isFalse);
   });
 
   test('video click tracking is untouched until openClick is called', () async {

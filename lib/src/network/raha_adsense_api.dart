@@ -78,12 +78,15 @@ final class RahaAdsenseApi {
     bool debugLogs = false,
     CancelToken? cancelToken,
   }) async {
-    final normalizedSignals = validateAndNormalizePublisherSignals(signals);
-    final body = <String, Object?>{
-      'visitorId': visitorId,
-      'userAgent': userAgent,
-      ...normalizedSignals,
-    };
+    // Temporarily disable request identity and targeting fields for diagnosis.
+    // Restore these lines to send visitor identity, user agent, and signals:
+    // final normalizedSignals = validateAndNormalizePublisherSignals(signals);
+    // final body = <String, Object?>{
+    //   'visitorId': visitorId,
+    //   'userAgent': userAgent,
+    //   ...normalizedSignals,
+    // };
+    final body = <String, Object?>{};
     final encoded = jsonEncode(body);
     if (utf8.encode(encoded).length > 16 * 1024) {
       throw const RahaAdsException.invalidRequest(
@@ -100,11 +103,7 @@ final class RahaAdsenseApi {
           placementId: placementId,
           format: format,
           visitorIdHash: visitorIdLogFingerprint,
-        )} bodyKeys=${<String>{
-          'visitorId',
-          'userAgent',
-          ...normalizedSignals.keys
-        }.join(',')} '
+        )} bodyKeys=${body.keys.join(',')} '
         'url=$requestUrl method=POST '
         'headers=${_debugJson(_configuredRequestHeaders())} '
         'body=${_debugJson(body)}',
