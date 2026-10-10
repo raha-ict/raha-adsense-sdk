@@ -78,15 +78,14 @@ final class RahaAdsenseApi {
     bool debugLogs = false,
     CancelToken? cancelToken,
   }) async {
-    // Temporarily disable request identity and targeting fields for diagnosis.
-    // Restore these lines to send visitor identity, user agent, and signals:
-    // final normalizedSignals = validateAndNormalizePublisherSignals(signals);
-    // final body = <String, Object?>{
-    //   'visitorId': visitorId,
-    //   'userAgent': userAgent,
-    //   ...normalizedSignals,
-    // };
-    final body = <String, Object?>{};
+    final normalizedSignals = validateAndNormalizePublisherSignals(signals);
+    // Temporarily omit visitorId to check whether it affects ad eligibility.
+    // Restore this field after the diagnostic:
+    // 'visitorId': visitorId,
+    final body = <String, Object?>{
+      'userAgent': userAgent,
+      ...normalizedSignals,
+    };
     final encoded = jsonEncode(body);
     if (utf8.encode(encoded).length > 16 * 1024) {
       throw const RahaAdsException.invalidRequest(

@@ -97,12 +97,13 @@ void main() {
     expect(combined, contains('event=request_start'));
     expect(combined, contains('requestSource=manual_requestByPlacementId'));
     expect(combined, contains('event=request_body'));
-    expect(combined, contains('bodyKeys= '));
+    expect(combined, contains('bodyKeys='));
     expect(combined, contains('/api/v1/ad-requests/request/banner-placement'));
     expect(combined, contains('method=POST'));
     expect(combined, contains('headers={"Accept":"application/json"'));
-    expect(combined, contains('body={}'));
-    expect(combined, isNot(contains('"genre":"news"')));
+    expect(combined, contains('"genre":"news"'));
+    expect(combined,
+        contains('"userAgent":{"deviceType":"phone","os":"android"}'));
     expect(combined, isNot(contains('"visitorId"')));
     expect(combined, contains('event=request_response'));
     expect(combined, contains('status=200'));
@@ -116,7 +117,7 @@ void main() {
     expect(combined, isNot(contains('impressionUrl=')));
   });
 
-  test('sends an empty request body while signals are disabled', () async {
+  test('sends userAgent and targeting signals without visitorId', () async {
     final runtime = await _runtime(server);
     addTearDown(runtime.dispose);
 
@@ -126,11 +127,12 @@ void main() {
     );
 
     final body = server.requestBodies.single;
-    expect(body, isEmpty);
     expect(body.containsKey('visitorId'), isFalse);
-    expect(body.containsKey('userAgent'), isFalse);
-    expect(body.containsKey('genre'), isFalse);
-    expect(body.containsKey('device_type'), isFalse);
+    expect(body['userAgent'], {'deviceType': 'phone', 'os': 'android'});
+    expect(body['genre'], 'news');
+    expect(body['screen'], 'home');
+    expect(body['device_type'], 'phone');
+    expect(body['os'], 'ANDROID');
     expect(body.containsKey('signals'), isFalse);
   });
 
