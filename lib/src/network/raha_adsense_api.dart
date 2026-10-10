@@ -91,6 +91,9 @@ final class RahaAdsenseApi {
       );
     }
 
+    final requestPath =
+        '/api/v1/ad-requests/request/${Uri.encodeComponent(placementId)}';
+    final requestUrl = Uri.parse(_dio.options.baseUrl).resolve(requestPath);
     if (debugLogs) {
       rahaAdsDebugLog(
         'event=request_body ${requestContext.fields(
@@ -101,20 +104,36 @@ final class RahaAdsenseApi {
           'visitorId',
           'userAgent',
           ...normalizedSignals.keys
-        }.join(',')}',
+        }.join(',')} '
+        'url=$requestUrl method=POST '
+        'headers=${_debugJson(_configuredRequestHeaders())} '
+        'body=${_debugJson(body)}',
       );
     }
 
     final response = await _guardNetwork(
       () => withOneRetry<Response<String>>(
         () => _dio.post<String>(
-          '/api/v1/ad-requests/request/${Uri.encodeComponent(placementId)}',
+          requestPath,
           data: encoded,
           cancelToken: cancelToken,
         ),
         cancelToken: cancelToken,
       ),
     );
+
+    if (debugLogs) {
+      rahaAdsDebugLog(
+        'event=request_response ${requestContext.fields(
+          placementId: placementId,
+          format: format,
+          visitorIdHash: visitorIdLogFingerprint,
+        )} url=$requestUrl status=${response.statusCode} '
+        'requestHeaders=${_debugJson(response.requestOptions.headers)} '
+        'responseHeaders=${_debugJson(response.headers.map)} '
+        'body=${_debugResponseBody(response.data)}',
+      );
+    }
 
     if (response.statusCode == 204) return null;
     _requireStatus(response, 200);
@@ -310,6 +329,69 @@ final class RahaAdsenseApi {
   }
 
   void dispose() => _dio.close(force: true);
+}
+
+Map<String, Object?> _configuredRequestHeaders() {
+  return <String, Object?>{
+    'Accept': 'application/json',
+    'Content-Type': Headers.jsonContentType,
+  };
+}
+
+String _debugJson(Object? value) {
+  final sanitized = _sanitizeDebugValue(value);
+  final encoded = jsonEncode(sanitized);
+  if (encoded.length <= 4096) return encoded;
+  return '${encoded.substring(0, 4096)}…<truncated>';
+}
+
+String _debugResponseBody(Object? value) {
+  if (value == null) return '<empty>';
+  if (value is String) {
+    if (value.trim().isEmpty) return '<empty>';
+    try {
+      return _debugJson(jsonDecode(value));
+    } on FormatException {
+      final safeText = value.replaceAll(
+        RegExp(r'https?://[^\s"<>]+'),
+        '<url-redacted>',
+      );
+      return _debugJson(safeText);
+    }
+  }
+  return _debugJson(value);
+}
+
+Object? _sanitizeDebugValue(Object? value, {String? key}) {
+  final normalizedKey = key?.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+  if (normalizedKey != null &&
+      (normalizedKey == 'visitorid' ||
+          normalizedKey.contains('authorization') ||
+          normalizedKey.contains('cookie') ||
+          normalizedKey.contains('token') ||
+          normalizedKey.contains('secret') ||
+          normalizedKey.contains('password') ||
+          normalizedKey.contains('apikey') ||
+          normalizedKey.contains('email') ||
+          normalizedKey.contains('phone') ||
+          normalizedKey == 'impressionurl' ||
+          normalizedKey == 'clicktrackingurl' ||
+          normalizedKey == 'trackingurl' ||
+          normalizedKey == 'redirecturl' ||
+          normalizedKey.contains('location'))) {
+    return '<redacted>';
+  }
+  if (value is Map) {
+    return <String, Object?>{
+      for (final entry in value.entries)
+        entry.key.toString():
+            _sanitizeDebugValue(entry.value, key: entry.key.toString()),
+    };
+  }
+  if (value is Iterable) {
+    return value.map((item) => _sanitizeDebugValue(item)).toList();
+  }
+  return value;
 }
 
 RahaTrackingResult _normalizedClickTrackingResult({

@@ -74,7 +74,8 @@ void main() {
     expect(logs.join('\n'), isNot(contains('reason=interval_not_reached')));
   });
 
-  test('structured request and tracking logs redact IDs and URLs', () async {
+  test('detailed request logs redact sensitive values and tracking URLs',
+      () async {
     final runtime = await _runtime(server, enableDebugLogs: true);
     addTearDown(runtime.dispose);
     final originalDebugPrint = debugPrint;
@@ -97,6 +98,16 @@ void main() {
     expect(combined, contains('requestSource=manual_requestByPlacementId'));
     expect(combined, contains('event=request_body'));
     expect(combined, contains('bodyKeys='));
+    expect(combined, contains('/api/v1/ad-requests/request/banner-placement'));
+    expect(combined, contains('method=POST'));
+    expect(combined, contains('headers={"Accept":"application/json"'));
+    expect(combined, contains('"genre":"news"'));
+    expect(combined, contains('"visitorId":"<redacted>"'));
+    expect(combined, contains('event=request_response'));
+    expect(combined, contains('status=200'));
+    expect(combined, contains('requestHeaders='));
+    expect(combined, contains('responseHeaders='));
+    expect(combined, contains('"format":"banner"'));
     expect(combined, contains('event=impression_attempt'));
     expect(combined, contains('event=click_attempt'));
     expect(combined, isNot(contains('stable-test-visitor-id')));
@@ -201,8 +212,14 @@ void main() {
   });
 
   test('returns null when placement request has no fill', () async {
-    final runtime = await _runtime(server);
+    final runtime = await _runtime(server, enableDebugLogs: true);
     addTearDown(runtime.dispose);
+    final originalDebugPrint = debugPrint;
+    final logs = <String>[];
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) logs.add(message);
+    };
+    addTearDown(() => debugPrint = originalDebugPrint);
 
     final ad = await runtime.requestAdByPlacementId(
       placementId: 'nofill-placement',
@@ -210,6 +227,9 @@ void main() {
     );
 
     expect(ad, isNull);
+    expect(logs.join('\n'), contains('event=request_response'));
+    expect(logs.join('\n'), contains('status=204'));
+    expect(logs.join('\n'), contains('body=<empty>'));
   });
 
   test('throws placementNotFound for missing placement id', () async {
