@@ -75,24 +75,14 @@ class _RahaNativeAdState extends State<RahaNativeAd>
     WidgetsBinding.instance.addObserver(this);
     _cancelToken = CancelToken();
     _widgetInstanceId = nextRahaWidgetInstanceId();
-    _debugLog('event=widget_mount');
+    _debugLog('event=widget_mount placementId=${_placementId()}');
     _requestScheduler = VisibleAdRequestScheduler(
       load: _load,
-      tryAcquireRequestSlot: _tryAcquireRequestSlot,
+      canLoad: () => RahaAdsense.isReady,
       onLog: _debugLog,
       placementId: _placementId,
       widgetInstanceId: _widgetInstanceId,
     );
-  }
-
-  @override
-  void didUpdateWidget(covariant RahaNativeAd oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!samePublisherSignals(oldWidget.signals, widget.signals) ||
-        oldWidget.language != widget.language ||
-        oldWidget.differenceTime != widget.differenceTime) {
-      _requestScheduler.requestRefresh();
-    }
   }
 
   @override
@@ -126,7 +116,7 @@ class _RahaNativeAdState extends State<RahaNativeAd>
     _visibleFraction = 0;
   }
 
-  Future<void> _load(RahaAdRequestLogContext requestContext) async {
+  Future<bool> _load(RahaAdRequestLogContext requestContext) async {
     _activeRequestContext = requestContext;
     _cancelToken.cancel();
     _cancelToken = CancelToken();
@@ -138,7 +128,7 @@ class _RahaNativeAdState extends State<RahaNativeAd>
         cancelToken: _cancelToken,
         requestContext: requestContext,
       );
-      if (!mounted || _cancelToken.isCancelled) return;
+      if (!mounted || _cancelToken.isCancelled) return false;
       _impressionTimer?.cancel();
       _impressionTimer = null;
       _impressionRecorded = false;
@@ -149,10 +139,12 @@ class _RahaNativeAdState extends State<RahaNativeAd>
       });
       if (ad != null) widget.onLoaded?.call(ad.info);
       _evaluateViewability();
+      return ad != null;
     } on Object catch (error) {
-      if (!mounted || _cancelToken.isCancelled) return;
+      if (!mounted || _cancelToken.isCancelled) return false;
       widget.onError?.call(_asRahaError(error));
       setState(() => _noFill = true);
+      return false;
     }
   }
 
@@ -225,20 +217,16 @@ class _RahaNativeAdState extends State<RahaNativeAd>
       ? RahaAdsense.runtime.automaticNativePlacementId()
       : 'native';
 
-  Duration? _tryAcquireRequestSlot() {
-    if (!RahaAdsense.isReady) return const Duration(minutes: 30);
-    return RahaAdsense.runtime.tryAcquireAutomaticRequest(_placementId());
-  }
-
   void _debugLog(String message) {
     if (RahaAdsense.isReady && RahaAdsense.runtime.config.enableDebugLogs) {
       final requestContext = _activeRequestContext;
+      final hasLoggedSource = message.contains('requestSource=');
       rahaAdsDebugLog(
         '$message format=native visitorIdHash='
         '${RahaAdsense.runtime.visitorIdLogFingerprint} '
         'widgetInstanceId=$_widgetInstanceId '
         'requestId=${requestContext?.requestId ?? 'none'} '
-        'requestSource=${requestContext?.requestSource ?? 'widget_lifecycle'} '
+        '${hasLoggedSource ? '' : 'requestSource=${requestContext?.requestSource ?? 'widget_lifecycle'} '}'
         'trigger=${requestContext?.trigger ?? 'state'} '
         'visibleFraction=$_visibleFraction',
       );

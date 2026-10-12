@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:uuid/uuid.dart';
 
 import '../core/ad_request_log_context.dart';
@@ -8,27 +7,24 @@ import '../core/ad_request_log_context.dart';
 final class VisibleAdRequestScheduler {
   VisibleAdRequestScheduler({
     required this.load,
-    required this.tryAcquireRequestSlot,
+    required this.canLoad,
     required this.onLog,
     required this.placementId,
     required this.widgetInstanceId,
   });
 
-  final Future<void> Function(RahaAdRequestLogContext context) load;
-  final Duration? Function() tryAcquireRequestSlot;
+  final Future<bool> Function(RahaAdRequestLogContext context) load;
+  final bool Function() canLoad;
   final void Function(String message) onLog;
   final String Function() placementId;
   final String widgetInstanceId;
 
-  Timer? _timer;
   bool _visible = false;
   bool _pending = true;
   bool _loading = false;
   bool _disposed = false;
-  bool _hasRequested = false;
-  bool _waitedForRequestSlot = false;
+  bool _requestStarted = false;
   double _visibleFraction = 0;
-  String _pendingTrigger = 'visibility';
   static const Uuid _uuid = Uuid();
 
   void updateVisibility(double visibleFraction) {
@@ -37,15 +33,10 @@ final class VisibleAdRequestScheduler {
     _visibleFraction = visibleFraction;
     _visible = visibleFraction > 0;
     if (!_visible) {
-      if (_timer != null && _pending) {
-        onLog('event=refresh_skip placementId=${placementId()} '
-            'reason=not_visible');
-      }
-      _timer?.cancel();
-      _timer = null;
       return;
     }
     if (!wasVisible) {
+      if (!_requestStarted) _pending = true;
       onLog(
         'event=visible placementId=${placementId()} '
         'visibleFraction=$visibleFraction',
@@ -54,55 +45,32 @@ final class VisibleAdRequestScheduler {
     _scheduleOrLoad();
   }
 
-  void requestRefresh() {
-    if (_disposed) return;
-    _pending = true;
-    _pendingTrigger = 'changed_inputs';
-    if (!_visible) {
-      onLog('event=refresh_skip placementId=${placementId()} '
-          'reason=not_visible');
-      return;
-    }
-    _scheduleOrLoad();
-  }
-
   void _scheduleOrLoad() {
-    if (_disposed || !_visible || _loading || !_pending) return;
-    final remaining = tryAcquireRequestSlot();
-    if (remaining != null) {
-      _waitedForRequestSlot = true;
-      onLog(
-        'event=refresh_skip placementId=${placementId()} '
-        'reason=interval_not_reached '
-        'remainingMs=${remaining.inMilliseconds}',
-      );
-      _timer?.cancel();
-      _timer = Timer(remaining.isNegative ? Duration.zero : remaining, () {
-        _timer = null;
-        if (_visible && !_disposed && _pending) _scheduleOrLoad();
-      });
+    if (_disposed ||
+        _requestStarted ||
+        !_visible ||
+        _loading ||
+        !_pending ||
+        !canLoad()) {
       return;
-    }
-    if (_hasRequested || _waitedForRequestSlot) {
-      onLog('event=refresh_allowed placementId=${placementId()}');
     }
     _startLoad();
   }
 
   void _startLoad() {
-    if (_disposed || !_visible || _loading || !_pending) return;
+    if (_disposed || _requestStarted || !_visible || _loading || !_pending) {
+      return;
+    }
     _pending = false;
+    _requestStarted = true;
     _loading = true;
     final context = RahaAdRequestLogContext(
       requestId: _uuid.v4(),
-      requestSource: _hasRequested ? 'auto_refresh' : 'auto_visible',
-      trigger: _pendingTrigger,
+      requestSource: 'auto_initial_visible',
+      trigger: 'visibility',
       widgetInstanceId: widgetInstanceId,
       visibleFraction: _visibleFraction,
     );
-    _hasRequested = true;
-    _waitedForRequestSlot = false;
-    _pendingTrigger = 'interval';
     unawaited(_runLoad(context));
   }
 
@@ -111,17 +79,10 @@ final class VisibleAdRequestScheduler {
       await load(context);
     } finally {
       _loading = false;
-      if (!_disposed) {
-        // Keep a refresh pending if the request finishes while offscreen.
-        _pending = true;
-        if (_visible) _scheduleOrLoad();
-      }
     }
   }
 
   void dispose() {
     _disposed = true;
-    _timer?.cancel();
-    _timer = null;
   }
 }

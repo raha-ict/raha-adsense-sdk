@@ -8,6 +8,7 @@ Future<void> main() async {
 
   await RahaAdsense.setup(
     appId: const String.fromEnvironment('RAHA_ADSENSE_APP_ID'),
+    visitorId: const String.fromEnvironment('RAHA_ADSENSE_VISITOR_ID'),
     deviceType: 'phone',
     os: 'android',
   );

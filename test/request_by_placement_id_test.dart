@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:raha_adsense/src/config/raha_adsense_config.dart';
 import 'package:raha_adsense/src/config/raha_adsense_endpoints.dart';
 import 'package:raha_adsense/src/core/raha_adsense_runtime.dart';
@@ -15,7 +14,6 @@ void main() {
   late _TestAdServer server;
 
   setUp(() async {
-    SharedPreferences.setMockInitialValues({});
     server = await _TestAdServer.start();
   });
 
@@ -43,8 +41,14 @@ void main() {
   });
 
   test('explicit placement requests remain caller-controlled', () async {
-    final runtime = await _runtime(server);
+    final runtime = await _runtime(server, enableDebugLogs: true);
     addTearDown(runtime.dispose);
+    final originalDebugPrint = debugPrint;
+    final logs = <String>[];
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) logs.add(message);
+    };
+    addTearDown(() => debugPrint = originalDebugPrint);
 
     await runtime.requestAdByPlacementId(
       placementId: 'banner-placement',
@@ -59,9 +63,17 @@ void main() {
       'banner-placement',
       'banner-placement',
     ]);
+    expect(
+      logs.where((line) =>
+          line.contains('event=request_start') &&
+          line.contains('requestSource=manual_requestByPlacementId')),
+      hasLength(2),
+    );
+    expect(logs.join('\n'), isNot(contains('reason=interval_not_reached')));
   });
 
-  test('structured request and tracking logs redact IDs and URLs', () async {
+  test('detailed request logs redact sensitive values and tracking URLs',
+      () async {
     final runtime = await _runtime(server, enableDebugLogs: true);
     addTearDown(runtime.dispose);
     final originalDebugPrint = debugPrint;
@@ -84,6 +96,18 @@ void main() {
     expect(combined, contains('requestSource=manual_requestByPlacementId'));
     expect(combined, contains('event=request_body'));
     expect(combined, contains('bodyKeys='));
+    expect(combined, contains('/api/v1/ad-requests/request/banner-placement'));
+    expect(combined, contains('method=POST'));
+    expect(combined, contains('headers={"Accept":"application/json"'));
+    expect(combined, contains('"genre":"news"'));
+    expect(combined,
+        contains('"userAgent":{"deviceType":"phone","os":"android"}'));
+    expect(combined, contains('"visitorId":"<redacted>"'));
+    expect(combined, contains('event=request_response'));
+    expect(combined, contains('status=200'));
+    expect(combined, contains('requestHeaders='));
+    expect(combined, contains('responseHeaders='));
+    expect(combined, contains('"format":"banner"'));
     expect(combined, contains('event=impression_attempt'));
     expect(combined, contains('event=click_attempt'));
     expect(combined, isNot(contains('stable-test-visitor-id')));
@@ -91,7 +115,7 @@ void main() {
     expect(combined, isNot(contains('impressionUrl=')));
   });
 
-  test('serializes exact visitorId and userAgent with flat contextual signals',
+  test('sends configured visitorId, userAgent, and targeting signals',
       () async {
     final runtime = await _runtime(server);
     addTearDown(runtime.dispose);
@@ -103,33 +127,12 @@ void main() {
 
     final body = server.requestBodies.single;
     expect(body['visitorId'], 'stable-test-visitor-id');
-    expect(body.containsKey('visitor_id'), isFalse);
     expect(body['userAgent'], {'deviceType': 'phone', 'os': 'android'});
     expect(body['genre'], 'news');
     expect(body['screen'], 'home');
     expect(body['device_type'], 'phone');
     expect(body['os'], 'ANDROID');
     expect(body.containsKey('signals'), isFalse);
-  });
-
-  test('persists the same visitorId across runtime instances', () async {
-    final firstRuntime = await _runtime(server, usePersistedVisitorId: true);
-    await firstRuntime.requestAdByPlacementId(
-      placementId: 'banner-placement',
-      signals: const {},
-    );
-    final firstVisitorId = server.requestBodies.last['visitorId'];
-    firstRuntime.dispose();
-
-    final secondRuntime = await _runtime(server, usePersistedVisitorId: true);
-    addTearDown(secondRuntime.dispose);
-    await secondRuntime.requestAdByPlacementId(
-      placementId: 'banner-placement',
-      signals: const {},
-    );
-
-    expect(server.requestBodies.last['visitorId'], firstVisitorId);
-    expect(firstVisitorId, isA<String>());
   });
 
   test('video click tracking is untouched until openClick is called', () async {
@@ -188,8 +191,14 @@ void main() {
   });
 
   test('returns null when placement request has no fill', () async {
-    final runtime = await _runtime(server);
+    final runtime = await _runtime(server, enableDebugLogs: true);
     addTearDown(runtime.dispose);
+    final originalDebugPrint = debugPrint;
+    final logs = <String>[];
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) logs.add(message);
+    };
+    addTearDown(() => debugPrint = originalDebugPrint);
 
     final ad = await runtime.requestAdByPlacementId(
       placementId: 'nofill-placement',
@@ -197,6 +206,9 @@ void main() {
     );
 
     expect(ad, isNull);
+    expect(logs.join('\n'), contains('event=request_response'));
+    expect(logs.join('\n'), contains('status=204'));
+    expect(logs.join('\n'), contains('body=<empty>'));
   });
 
   test('throws placementNotFound for missing placement id', () async {
@@ -240,7 +252,6 @@ void main() {
 
 Future<RahaAdsenseRuntime> _runtime(
   _TestAdServer server, {
-  bool usePersistedVisitorId = false,
   bool enableDebugLogs = false,
 }) async {
   final runtime = RahaAdsenseRuntime(
@@ -256,8 +267,7 @@ Future<RahaAdsenseRuntime> _runtime(
       clickOpener: (uri, _) async {},
       enableDebugLogs: enableDebugLogs,
     ),
-    visitorIdLoader:
-        usePersistedVisitorId ? null : () async => 'stable-test-visitor-id',
+    visitorId: 'stable-test-visitor-id',
   );
   await runtime.initialize();
   return runtime;

@@ -43,6 +43,7 @@ Initialize the SDK before loading ads. Production endpoints are used by default:
 ```dart
 await RahaAdsense.setup(
   appId: '743e8c4b-08e0-4152-877e-e035f7d92d9a',
+  visitorId: 'your-stable-visitor-id',
   deviceType: 'phone',
   os: 'android',
 );
@@ -53,6 +54,7 @@ Use the development environment only when testing against the dev backend:
 ```dart
 await RahaAdsense.setup(
   appId: '743e8c4b-08e0-4152-877e-e035f7d92d9a',
+  visitorId: 'your-stable-visitor-id',
   deviceType: 'phone',
   os: 'android',
   environment: RahaAdsenseEnvironment.development,
@@ -119,11 +121,18 @@ URL to your opener.
 ```dart
 await RahaAdsense.setup(
   appId: '743e8c4b-08e0-4152-877e-e035f7d92d9a',
+  visitorId: 'your-stable-visitor-id',
+  deviceType: 'phone',
+  os: 'android',
   clickOpener: (destinationUrl, adInfo) async {
     await StbNativeBridge.openAdUrl(destinationUrl.toString());
   },
 );
 ```
+
+The publisher provides a stable `visitorId` during setup. The SDK sends it
+with each ad request; the backend manages frequency capping. The integrating
+app should retain this identifier across launches.
 
 ## API Overview
 

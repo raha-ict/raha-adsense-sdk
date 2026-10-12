@@ -2,13 +2,11 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:crypto/crypto.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
 import 'raha_ads_debug_log.dart';
 import 'ad_request_log_context.dart';
-import 'automatic_ad_request_coordinator.dart';
 import '../config/raha_adsense_config.dart';
 import '../errors/raha_adsense_exception.dart';
 import '../models/ad_response.dart';
@@ -24,24 +22,19 @@ import 'placement_registry.dart';
 final class RahaAdsenseRuntime {
   RahaAdsenseRuntime({
     required this.config,
+    required this.visitorId,
     RahaAdsenseApi? api,
     RahaUrlResolver? resolver,
-    Future<String> Function()? visitorIdLoader,
   })  : _api = api ?? RahaAdsenseApi(dio: buildRahaDio(config)),
-        _resolver = resolver ?? RahaUrlResolver(config.endpoints),
-        _visitorIdLoader = visitorIdLoader;
+        _resolver = resolver ?? RahaUrlResolver(config.endpoints);
 
   final RahaAdsenseConfig config;
+  final String visitorId;
   final RahaAdsenseApi _api;
   final RahaUrlResolver _resolver;
-  final Future<String> Function()? _visitorIdLoader;
   final Uuid _uuid = const Uuid();
-  final AutomaticAdRequestCoordinator _automaticRequestCoordinator =
-      AutomaticAdRequestCoordinator();
-  String? _visitorId;
 
   PlacementRegistry? _registry;
-  DateTime? _inventoryLoadedAt;
   Future<PlacementRegistry>? _inventoryRefresh;
   bool _disposed = false;
 
@@ -50,16 +43,7 @@ final class RahaAdsenseRuntime {
   /// This method is called once during initial SDK setup.
   Future<void> initialize({CancelToken? cancelToken}) async {
     _validateAppId(config.appId);
-    _visitorId = await (_visitorIdLoader?.call() ?? _loadVisitorId());
-    await _getRegistry(cancelToken: cancelToken, forceRefresh: true);
-  }
-
-  String get visitorId {
-    final value = _visitorId;
-    if (value == null) {
-      throw StateError('RahaAdsenseRuntime.initialize() has not completed.');
-    }
-    return value;
+    await _getRegistry(cancelToken: cancelToken);
   }
 
   String get visitorIdLogFingerprint =>
@@ -72,25 +56,6 @@ final class RahaAdsenseRuntime {
       _registry?.resolveNative().id ?? 'native';
 
   String automaticVideoPlacementId() => _registry?.resolveVideo().id ?? 'video';
-
-  Duration? tryAcquireAutomaticRequest(String placementId) =>
-      _automaticRequestCoordinator.tryAcquire(
-        placementId,
-        config.adRefreshInterval,
-      );
-
-  Future<String> _loadVisitorId() async {
-    final preferences = await SharedPreferences.getInstance();
-    final key = 'raha_adsense_visitor_id_${config.appId.toLowerCase()}';
-    final existing = preferences.getString(key)?.trim();
-    if (existing != null && existing.isNotEmpty) return existing;
-    final created = _uuid.v4();
-    final stored = await preferences.setString(key, created);
-    if (!stored) {
-      throw StateError('Could not persist the Raha visitor ID.');
-    }
-    return created;
-  }
 
   /// Request a banner ad decision and convert it into a response object.
   Future<RahaBannerAdResponse?> requestBannerAd({
@@ -339,22 +304,13 @@ final class RahaAdsenseRuntime {
     );
   }
 
-  /// Return the cached placement registry, refreshing it when needed.
+  /// Fetch the latest placement registry from the backend.
   ///
-  /// The registry is refreshed when there is no cached version, when a full
-  /// refresh is requested, or when the cached inventory is older than the
-  /// configured TTL.
+  /// Concurrent callers share the same in-flight inventory request.
   Future<PlacementRegistry> _getRegistry({
     CancelToken? cancelToken,
-    bool forceRefresh = false,
   }) async {
     _ensureAlive();
-    final registry = _registry;
-    final loadedAt = _inventoryLoadedAt;
-    final fresh = loadedAt != null &&
-        DateTime.now().difference(loadedAt) < config.inventoryTtl;
-    if (!forceRefresh && registry != null && fresh) return registry;
-
     return _inventoryRefresh ??= _refreshRegistry(cancelToken).whenComplete(
       () => _inventoryRefresh = null,
     );
@@ -383,7 +339,6 @@ final class RahaAdsenseRuntime {
     }
     final registry = PlacementRegistry(app: matches.single);
     _registry = registry;
-    _inventoryLoadedAt = DateTime.now();
     return registry;
   }
 
@@ -400,6 +355,7 @@ final class RahaAdsenseRuntime {
       );
     }
     final clickTrackingUrl = decision.clickTrackingUrl?.trim();
+    final impressionUrl = decision.impressionUrl?.trim();
     return RahaResolvedAd(
       info: RahaAdInfo(
         adId: decision.id,
@@ -407,7 +363,9 @@ final class RahaAdsenseRuntime {
         placementId: placement.id,
       ),
       decision: decision,
-      impressionUri: _resolver.resolveTracking(decision.impressionUrl),
+      impressionUri: impressionUrl == null || impressionUrl.isEmpty
+          ? null
+          : _resolver.resolveTracking(impressionUrl),
       clickTrackingUri: clickTrackingUrl == null || clickTrackingUrl.isEmpty
           ? null
           : _resolver.resolveTracking(clickTrackingUrl),
@@ -431,7 +389,8 @@ final class RahaAdsenseRuntime {
       _debugLog('event=request_no_fill $contextFields hasAd=false');
       return null;
     }
-    final impressionUrlPresent = decision.impressionUrl.trim().isNotEmpty;
+    final impressionUrlPresent =
+        decision.impressionUrl?.trim().isNotEmpty ?? false;
     _debugLog(
       'event=request_success $contextFields hasAd=true '
       'impressionUrlPresent=$impressionUrlPresent',
@@ -473,7 +432,9 @@ final class RahaAdsenseRuntime {
       imageUrl: _resolver.resolveAsset(asset.url),
       width: asset.width,
       height: asset.height,
-      recordImpression: () => _recordImpression(resolved),
+      recordImpression: resolved.impressionUri == null
+          ? () async {}
+          : () => _recordImpression(resolved),
       openClick: () => _openClick(resolved),
     );
   }
@@ -489,7 +450,9 @@ final class RahaAdsenseRuntime {
       videoUrl: _resolver.resolveAsset(asset.url),
       posterUrl: _optionalAssetUrl(asset.posterUrl),
       duration: Duration(seconds: asset.duration),
-      recordImpression: () => _recordImpression(resolved),
+      recordImpression: resolved.impressionUri == null
+          ? () async {}
+          : () => _recordImpression(resolved),
       openClick: () => _openClick(resolved),
     );
   }
@@ -508,7 +471,9 @@ final class RahaAdsenseRuntime {
       imageUrl: _resolver.resolveAsset(asset.url),
       width: asset.width,
       height: asset.height,
-      recordImpression: () => _recordImpression(resolved),
+      recordImpression: resolved.impressionUri == null
+          ? () async {}
+          : () => _recordImpression(resolved),
       openClick: () => _openClick(resolved),
     );
   }
@@ -526,7 +491,9 @@ final class RahaAdsenseRuntime {
       imageUrl: _optionalAssetUrl(asset.imageUrl),
       iconUrl: _optionalAssetUrl(asset.iconUrl),
       cta: _optionalText(asset.cta),
-      recordImpression: () => _recordImpression(resolved),
+      recordImpression: resolved.impressionUri == null
+          ? () async {}
+          : () => _recordImpression(resolved),
       openClick: () => _openClick(resolved),
     );
   }
@@ -621,6 +588,8 @@ final class RahaAdsenseRuntime {
   }
 
   Future<void> _recordImpression(RahaResolvedAd ad) async {
+    final impressionUri = ad.impressionUri;
+    if (impressionUri == null) return;
     _debugLog(
       'event=impression_attempt ${ad.requestContext.fields(
         placementId: ad.info.placementId,
@@ -630,7 +599,7 @@ final class RahaAdsenseRuntime {
     );
     try {
       final result = await _api.trackImpression(
-        ad.impressionUri,
+        impressionUri,
         eventId: ad.impressionEventId,
       );
       if (!result.isValid) {

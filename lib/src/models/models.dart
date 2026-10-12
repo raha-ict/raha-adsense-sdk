@@ -228,7 +228,7 @@ final class RahaAdDecisionDto {
     return RahaAdDecisionDto(
       id: _nonEmptyString(json['id'], 'id'),
       format: format,
-      impressionUrl: _nonEmptyString(json['impressionUrl'], 'impressionUrl'),
+      impressionUrl: _optionalNonEmptyString(json['impressionUrl'], 'impressionUrl'),
       clickTrackingUrl:
           _optionalNonEmptyString(json['clickTrackingUrl'], 'clickTrackingUrl'),
       asset: asset,
@@ -237,7 +237,7 @@ final class RahaAdDecisionDto {
 
   final String id;
   final RahaAdDecisionFormat format;
-  final String impressionUrl;
+  final String? impressionUrl;
   final String? clickTrackingUrl;
   final RahaAdAssetDto asset;
 }
@@ -301,7 +301,7 @@ final class RahaResolvedAd {
 
   final RahaAdInfo info;
   final RahaAdDecisionDto decision;
-  final Uri impressionUri;
+  final Uri? impressionUri;
   final Uri? clickTrackingUri;
   final String impressionEventId;
   final bool isClickable;
