@@ -20,8 +20,7 @@ final class RahaAdsenseConfig {
             RahaAdsenseEndpoints.development,
         },
         enableDebugLogs = enableDebugLogs ?? kDebugMode,
-        requestTimeout = const Duration(seconds: 9),
-        inventoryTtl = const Duration(minutes: 5);
+        requestTimeout = const Duration(seconds: 9);
 
   @visibleForTesting
   const RahaAdsenseConfig.forTesting({
@@ -32,7 +31,6 @@ final class RahaAdsenseConfig {
     this.clickOpener,
     this.enableDebugLogs = false,
     this.requestTimeout = const Duration(seconds: 9),
-    this.inventoryTtl = const Duration(minutes: 5),
   });
 
   final String appId;
@@ -42,5 +40,4 @@ final class RahaAdsenseConfig {
   final RahaAdsenseEndpoints endpoints;
   final bool enableDebugLogs;
   final Duration requestTimeout;
-  final Duration inventoryTtl;
 }
