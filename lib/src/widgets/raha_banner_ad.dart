@@ -24,6 +24,7 @@ class RahaBannerAd extends StatefulWidget {
   const RahaBannerAd({
     required this.size,
     super.key,
+    this.placementId,
     this.signals = const <String, Object?>{},
     this.language,
     this.differenceTime,
@@ -36,6 +37,10 @@ class RahaBannerAd extends StatefulWidget {
 
   /// The requested banner size.
   final RahaBannerSize size;
+
+  /// Optional exact inventory placement to request. When omitted, the SDK
+  /// resolves the banner placement from [size].
+  final String? placementId;
 
   /// Optional contextual signals that are sent with the ad request.
   final Map<String, Object?> signals;
@@ -121,15 +126,31 @@ class _RahaBannerAdState extends State<RahaBannerAd>
     _cancelToken.cancel();
     _cancelToken = CancelToken();
     try {
-      final ad = await RahaAdsense.runtime.requestBannerAd(
-        size: widget.size,
-        signals: widget.signals,
-        language: widget.language,
-        differenceTime: widget.differenceTime,
-        cancelToken: _cancelToken,
-        requestContext: requestContext,
-      );
+      final RahaAdResponse? response = widget.placementId == null
+          ? await RahaAdsense.runtime.requestBannerAd(
+              size: widget.size,
+              signals: widget.signals,
+              language: widget.language,
+              differenceTime: widget.differenceTime,
+              cancelToken: _cancelToken,
+              requestContext: requestContext,
+            )
+          : await RahaAdsense.runtime.requestAdByPlacementId(
+              placementId: widget.placementId!,
+              signals: widget.signals,
+              language: widget.language,
+              differenceTime: widget.differenceTime,
+              cancelToken: _cancelToken,
+              requestContext: requestContext,
+            );
       if (!mounted || _cancelToken.isCancelled) return false;
+      if (response != null && response is! RahaBannerAdResponse) {
+        throw const RahaAdsException(
+          RahaAdsErrorCode.invalidResponse,
+          'The specified placement did not return a banner ad.',
+        );
+      }
+      final ad = response as RahaBannerAdResponse?;
       _impressionTimer?.cancel();
       _impressionTimer = null;
       _imageDecoded = false;
@@ -292,8 +313,9 @@ class _RahaBannerAdState extends State<RahaBannerAd>
   }
 
   String _placementId() => RahaAdsense.isReady
-      ? RahaAdsense.runtime.automaticBannerPlacementId(widget.size)
-      : 'banner:${widget.size.wireValue}';
+      ? widget.placementId ??
+          RahaAdsense.runtime.automaticBannerPlacementId(widget.size)
+      : widget.placementId ?? 'banner:${widget.size.wireValue}';
 
   void _debugLog(String message) {
     if (RahaAdsense.isReady && RahaAdsense.runtime.config.enableDebugLogs) {
