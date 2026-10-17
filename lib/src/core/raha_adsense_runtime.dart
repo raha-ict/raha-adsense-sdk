@@ -267,10 +267,6 @@ final class RahaAdsenseRuntime {
         signals: signals,
         visitorId: visitorId,
         visitorIdLogFingerprint: visitorIdLogFingerprint,
-        userAgent: <String, Object?>{
-          'deviceType': config.deviceType,
-          'os': config.os,
-        },
         format: placement.format.name,
         requestContext: requestContext,
         debugLogs: config.enableDebugLogs,

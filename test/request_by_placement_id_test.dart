@@ -100,8 +100,7 @@ void main() {
     expect(combined, contains('method=POST'));
     expect(combined, contains('headers={"Accept":"application/json"'));
     expect(combined, contains('"genre":"news"'));
-    expect(combined,
-        contains('"userAgent":{"deviceType":"phone","os":"android"}'));
+    expect(combined, isNot(contains('userAgent')));
     expect(combined, contains('"visitorId":"<redacted>"'));
     expect(combined, contains('event=request_response'));
     expect(combined, contains('status=200'));
@@ -115,7 +114,7 @@ void main() {
     expect(combined, isNot(contains('impressionUrl=')));
   });
 
-  test('sends configured visitorId, userAgent, and targeting signals',
+  test('sends configured visitorId and targeting signals',
       () async {
     final runtime = await _runtime(server);
     addTearDown(runtime.dispose);
@@ -127,7 +126,7 @@ void main() {
 
     final body = server.requestBodies.single;
     expect(body['visitorId'], 'stable-test-visitor-id');
-    expect(body['userAgent'], {'deviceType': 'phone', 'os': 'android'});
+    expect(body.containsKey('userAgent'), isFalse);
     expect(body['genre'], 'news');
     expect(body['screen'], 'home');
     expect(body['device_type'], 'phone');

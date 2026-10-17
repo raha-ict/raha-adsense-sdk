@@ -72,7 +72,6 @@ final class RahaAdsenseApi {
     required Map<String, Object?> signals,
     required String visitorId,
     required String visitorIdLogFingerprint,
-    required Map<String, Object?> userAgent,
     required String format,
     required RahaAdRequestLogContext requestContext,
     bool debugLogs = false,
@@ -81,7 +80,6 @@ final class RahaAdsenseApi {
     final normalizedSignals = validateAndNormalizePublisherSignals(signals);
     final body = <String, Object?>{
       'visitorId': visitorId,
-      'userAgent': userAgent,
       ...normalizedSignals,
     };
     final encoded = jsonEncode(body);
